@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Parametreler · MAGNA IT</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/magna-icon.png') }}">
+  <style>
+    body{background: #f6f7f9}
+    .section-card{border-radius:14px}
+    .chip{background:#eef2f6;border-radius:999px;padding:.35rem .8rem;font-weight:600}
+    .item-row{border:1px solid #e9ecef;border-radius:12px;padding:.6rem .8rem;margin-bottom:.6rem;background:#fff}
+    .item-actions .btn{border-radius:10px}
+    .scroll-panel{max-height:420px;overflow:auto;padding-right:.25rem}
+    .title-card{border-radius:12px}
+    .scroll-panel{max-height: 280px; overflow-y: auto; padding-right:.25rem;}
+    .navbar-dark .nav-link{ font-weight:600; }
+    .navbar-dark .nav-link.active{ color:#fff; border-bottom:2px solid #e53935; }
+    .footer {
+    background: #f9fafb;   
+    color: #6b7280;      
+    text-align: center;
+    padding: 10px;
+    font-size: 14px;
+    border-top: 1px solid #e5e7eb; 
+    margin-top: 20px;
+  }
+  </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg navbar-dark" style="background:#000;">
+  <div class="container d-flex align-items-center">
+    <!-- Sol logo/brand -->
+     <a class="navbar-brand d-flex align-items-center me-3" href="{{ url_for('inventory') }}">
+      <img src="{{ url_for('static', filename='img/magna-logo-navbar.png') }}" alt="MAGNA Logo" height="32" class="me-2">
+      <span class="brand-subtitle">IT CİHAZ TAKİP UYGULAMASI</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse flex-grow-0" id="nav">
+      <ul class="navbar-nav ms-3">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Depo Envanteri</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('faults') }}">Arızalı Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('service') }}">Servis Geçmişi</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{{ url_for('params') }}">Parametreler</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('reports') }}">Raporlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('kullanim') }}">Nasıl Çalışır</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container my-4">
+
+  {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert {% if cat=='ok' %}alert-success{% elif cat=='error' %}alert-danger{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+          {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card title-card mb-3">
+    <div class="card-body">
+      <h4 class="mb-0">Parametreler</h4>
+    </div>
+  </div>
+
+  <!-- İki sütun: Markalar | Tipler -->
+  <div class="row g-3">
+    <!-- Markalar -->
+    <div class="col-lg-6">
+      <div class="card section-card shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-bold mb-3">Markalar</h6>
+
+          <form class="d-flex gap-2 mb-3" method="post" action="{{ url_for('params_item_add', key='brands') }}">
+            <input class="form-control" name="value" placeholder="Marka/Model ekle">
+            <button class="btn btn-danger px-4">Ekle</button>
+          </form>
+
+          <div class="scroll-panel">
+            {% for v in brands %}
+            <div class="item-row d-flex align-items-center justify-content-between">
+              <span class="chip">{{ v }}</span>
+              <div class="item-actions d-flex align-items-center gap-2">
+                <span class="badge rounded-pill text-bg-light border text-secondary">
+                  {{ brand_counts.get(v,0) }} kayıt
+                </span>
+                <form method="post" action="{{ url_for('params_item_delete', key='brands') }}">
+                  <input type="hidden" name="value" value="{{ v }}">
+                  <button class="btn btn-outline-danger btn-sm px-3"
+                          {% if brand_counts.get(v,0) > 0 %}disabled title="Depoda kullanım var"{% endif %}
+                          onclick="return confirm('Silinsin mi?')">Sil</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <div class="text-muted small">Kayıt yok.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tipler -->
+    <div class="col-lg-6">
+      <div class="card section-card shadow-sm">
+        <div class="card-body">
+          <h6 class="fw-bold mb-3">Tipler</h6>
+
+          <form class="d-flex gap-2 mb-3" method="post" action="{{ url_for('params_item_add', key='types') }}">
+            <input class="form-control" name="value" placeholder="Tip ekle (Laptop PC / Monitor...)">
+            <button class="btn btn-danger px-4">Ekle</button>
+          </form>
+
+          <div class="scroll-panel">
+            {% for v in types %}
+            <div class="item-row d-flex align-items-center justify-content-between">
+              <span class="chip">{{ v }}</span>
+              <div class="item-actions d-flex align-items-center gap-2">
+                <span class="badge rounded-pill text-bg-light border text-secondary">
+                  {{ type_counts.get(v,0) }} kayıt
+                </span>
+                <form method="post" action="{{ url_for('params_item_delete', key='types') }}">
+                  <input type="hidden" name="value" value="{{ v }}">
+                  <button class="btn btn-outline-danger btn-sm px-3"
+                          {% if type_counts.get(v,0) > 0 %}disabled title="Depoda kullanım var"{% endif %}
+                          onclick="return confirm('Silinsin mi?')">Sil</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <div class="text-muted small">Kayıt yok.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OS Listesi (tam genişlik) -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card section-card shadow-sm">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3">OS Listesi</h6>
+
+        <form class="d-flex gap-2 mb-3" method="post" action="{{ url_for('params_item_add', key='os_list') }}">
+          <input class="form-control" name="value" placeholder="Örn: WIN11 23H2">
+          <button class="btn btn-danger px-4">Ekle</button>
+        </form>
+
+        <div class="scroll-panel">
+          {% for v in oslist %}
+          <div class="item-row d-flex align-items-center justify-content-between">
+            <span class="chip">{{ v }}</span>
+            <div class="item-actions d-flex align-items-center gap-2">
+              <span class="badge rounded-pill text-bg-light border text-secondary">
+                {{ os_counts.get(v,0) }} kayıt
+              </span>
+              <form method="post" action="{{ url_for('params_item_delete', key='os_list') }}">
+                <input type="hidden" name="value" value="{{ v }}">
+                <button class="btn btn-outline-danger btn-sm px-3"
+                        {% if os_counts.get(v,0) > 0 %}disabled title="Depoda kullanım var"{% endif %}
+                        onclick="return confirm('Silinsin mi?')">Sil</button>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <div class="text-muted small ps-2">Kayıt yok.</div>
+          {% endfor %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<footer class="footer">
+  <p>© 2025 Cihaz Takip Sistemi</p>
+</footer>
+
+</body>
+</html>

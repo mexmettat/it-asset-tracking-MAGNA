@@ -1,0 +1,9 @@
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+python-dotenv==1.0.1
+# Rapor çıktıları için
+pandas==2.2.2
+openpyxl==3.1.5        # Excel yazma/okuma (pandas ExcelWriter default engine)
+xlsxwriter==3.2.0      # (Opsiyonel) daha zengin Excel biçimlendirme isterseniz
+# PDF üretimi
+reportlab==4.2.2

@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Arızalı Cihazlar · MAGNA IT</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/magna-icon.png') }}">
+  <style>
+    .navbar-dark .nav-link{font-weight:600}
+    .navbar-dark .nav-link.active{color:#fff;border-bottom:2px solid #e53935}
+    .footer {
+      background:#f9fafb; color:#6b7280; text-align:center;
+      padding:10px; font-size:14px; border-top:1px solid #e5e7eb; margin-top:20px;
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg navbar-dark" style="background:#000;">
+  <div class="container d-flex align-items-center">
+    <!-- Sol logo/brand -->
+     <a class="navbar-brand d-flex align-items-center me-3" href="{{ url_for('inventory') }}">
+      <img src="{{ url_for('static', filename='img/magna-logo-navbar.png') }}" alt="MAGNA Logo" height="32" class="me-2">
+      <span class="brand-subtitle">IT CİHAZ TAKİP UYGULAMASI</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse flex-grow-0" id="nav">
+      <ul class="navbar-nav ms-3">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Depo Envanteri</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{{ url_for('faults') }}">Arızalı Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('service') }}">Servis Geçmişi</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('params') }}">Parametreler</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('reports') }}">Raporlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('kullanim') }}">Nasıl Çalışır</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container my-4">
+
+  {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="alert {% if cat=='ok' %}alert-success{% elif cat=='error' %}alert-danger{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+      <h5 class="mb-0">Arızalı Cihazlar</h5>
+
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <!-- Arama + sayfa başına -->
+        <form method="get" action="{{ url_for('faults') }}" class="d-flex align-items-center gap-2">
+          <input type="text" class="form-control" name="q" placeholder="Seri / Marka / Tip / Home Code / OS..."
+                 value="{{ q or '' }}" style="min-width:220px">
+          <!-- arama veya per_page değişince 1. sayfadan başla -->
+          <input type="hidden" name="page" value="1">
+
+          <span class="text-muted small">Göster:</span>
+          <select name="per_page" class="form-select form-select-sm" onchange="this.form.submit()">
+            {% for n in [10,20,50] %}
+              <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+          </select>
+
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Ara</button>
+        </form>
+
+        <!-- Arıza Ekle -->
+        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#faultAddModal">
+          Arıza Ekle
+        </button>
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('inventory') }}">Depoya Dön</a>
+
+        <!-- Sayfalama -->
+        <div class="btn-group btn-group-sm ms-1">
+          {% if pagination.has_prev %}
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('faults', page=pagination.prev_num, per_page=per_page, q=q) }}">‹</a>
+          {% else %}<button class="btn btn-outline-secondary" disabled>‹</button>{% endif %}
+          <button class="btn btn-outline-secondary" disabled>
+            {{ pagination.page }} / {{ pagination.pages or 1 }}
+          </button>
+          {% if pagination.has_next %}
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('faults', page=pagination.next_num, per_page=per_page, q=q) }}">›</a>
+          {% else %}<button class="btn btn-outline-secondary" disabled>›</button>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Başlık</th>
+            <th>Cihaz</th>
+            <th>Durum</th>
+            <th>Tarih</th>
+            <th>İşlemler</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in pagination.items %}
+          <tr>
+            <td class="text-wrap">
+              {{ open_fault_title.get(d.id, "Depodan arızalı işaretlendi (" ~ d.serial ~ ")") }}
+            </td>
+            <td class="text-wrap">{{ d.brand or '—' }} • {{ d.serial }}</td>
+
+            <td>
+              {% if d.is_faulty %}
+                <span class="badge rounded-pill text-bg-danger">Açık</span>
+              {% else %}
+                <span class="badge rounded-pill text-bg-success">Çözüldü</span>
+              {% endif %}
+            </td>
+
+            <td class="text-nowrap">{{ d.created_at.strftime('%Y-%m-%d') }}</td>
+
+            <td class="text-nowrap">
+              <!-- Servise Gönder -->
+              <form method="post" action="{{ url_for('service_add') }}" class="d-inline">
+                <input type="hidden" name="device_id" value="{{ d.id }}">
+                <input type="hidden" name="service_date" value="">
+                <input type="hidden" name="status" value="Beklemede">
+                <input type="hidden" name="description" value="Arızadan servise gönderildi">
+                <input type="hidden" name="cost" value="0">
+                <button class="btn btn-sm btn-warning">Servise Gönder</button>
+              </form>
+
+              <!-- Çözüldü -->
+              {% set fault_id = open_fault_id.get(d.id) %}
+              {% if fault_id %}
+              <form method="post" action="{{ url_for('faults_close', id=fault_id) }}" class="d-inline">
+                <button class="btn btn-sm btn-success">Çözüldü</button>
+              </form>
+              {% else %}
+              <form method="post" action="{{ url_for('inventory_mark_ok', id=d.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-success">Çözüldü</button>
+              </form>
+              {% endif %}
+
+              <!-- İptal (arızayı kapatmak için de kullanılabilir) -->
+              <form method="post" action="{{ url_for('inventory_mark_ok', id=d.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-secondary">İptal</button>
+              </form>
+
+              <!-- Sil (cihazı envanterden kaldırır) -->
+              <form method="post" action="{{ url_for('inventory_delete', id=d.id) }}" class="d-inline"
+                    onsubmit="return confirm('Cihaz envanterden silinecek. Emin misiniz?')">
+                <button class="btn btn-sm btn-outline-danger">Sil</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-4">Arızalı cihaz bulunmuyor.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ARIZA EKLE MODAL -->
+<div class="modal fade" id="faultAddModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <form id="faultForm" method="post" action="{{ url_for('faults_add') }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Arıza Ekle</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="row g-3 align-items-center mb-1">
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="mode" id="modeExisting" value="existing" checked>
+                <label class="form-check-label fw-semibold" for="modeExisting">Mevcut cihaz</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="mode" id="modeNew" value="new">
+                <label class="form-check-label fw-semibold" for="modeNew">Yeni cihaz oluştur</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mevcut cihaz seçimi -->
+          <div id="existingWrap" class="row g-3">
+            <div class="col-12">
+              <select id="existingDevice" name="device_id" class="form-select" required>
+                {% for d in (devices or []) %}
+                  <option value="{{ d.id }}">{{ d.brand or '—' }} • {{ d.serial }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <input name="fault_title" class="form-control" placeholder="Arıza başlığı (örn: Klavye çalışmıyor)">
+            </div>
+          </div>
+
+          <!-- Yeni cihaz oluşturma alanı -->
+          <div id="newWrap" class="row g-3 d-none">
+            <div class="col-md-6">
+              <label class="form-label">Marka</label>
+              <select name="brand" class="form-select">
+                {% for b in (brands or []) %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Tip</label>
+              <select name="type" class="form-select">
+                {% for t in (types or []) %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Seri No</label>
+              <input name="serial" class="form-control" placeholder="Boş bırakılırsa NONE atanır">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Home Code</label>
+              <input name="home_code" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">OS</label>
+              <select name="os" class="form-select">
+                <option value="">—</option>
+                {% for o in (oslist or []) %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Adet</label>
+              <input name="quantity" type="number" min="1" value="1" class="form-control">
+            </div>
+            <div class="col-12">
+              <input name="fault_title_new" class="form-control" placeholder="Arıza başlığı (örn: Klavye çalışmıyor)">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Vazgeç</button>
+          <button type="submit" class="btn btn-danger">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  (function(){
+    const modeExisting = document.getElementById('modeExisting');
+    const modeNew = document.getElementById('modeNew');
+    const existingWrap = document.getElementById('existingWrap');
+    const newWrap = document.getElementById('newWrap');
+    const sel = document.getElementById('existingDevice');
+
+    function syncMode() {
+      const isExisting = modeExisting.checked;
+      existingWrap.classList.toggle('d-none', !isExisting);
+      newWrap.classList.toggle('d-none', isExisting);
+      if (sel) sel.required = isExisting;
+      document.querySelectorAll('#newWrap [name]').forEach(el=>{
+        el.required = !isExisting && (['brand','type','serial','fault_title_new'].includes(el.name));
+      });
+    }
+    modeExisting.addEventListener('change', syncMode);
+    modeNew.addEventListener('change', syncMode);
+    syncMode();
+  })();
+</script>
+
+<footer class="footer">
+  <p>© 2025 Cihaz Takip Sistemi</p>
+</footer>
+
+</body>
+</html>
