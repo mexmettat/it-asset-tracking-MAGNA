@@ -4,7 +4,7 @@ This project is a **web-based inventory and service management system** develope
 Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Parameters**, **Reports**, and **User Guide**.
 
 ## 🚀 Quick Start
-
+```bash
 1. Create a virtual environment (optional but recommended)  
    `python -m venv venv`  
    - Windows: `venv\Scripts\activate`  
@@ -17,7 +17,7 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
    `python app.py` → [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
 > On the first run, the `app.db` SQLite database will be created automatically.
-
+```
 ## 🛠 Technologies Used
 - **Backend:** Python (Flask), SQLAlchemy  
 - **Frontend:** HTML5, CSS3, Bootstrap, Jinja2  
