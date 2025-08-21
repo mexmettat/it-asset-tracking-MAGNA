@@ -1,87 +1,95 @@
-# MAGNA — IT Depo & Servis Takip
+# MAGNA — IT Inventory & Service Tracking
 
-Bu proje, şirket içindeki cihazların takibini kolaylaştırmak amacıyla geliştirilmiş bir **web tabanlı envanter ve servis yönetim sistemi**dir.  
-Ana modüller: **Depo Envanteri**, **Arızalı Cihazlar**, **Servis Geçmişi**, **Parametreler**, **Raporlar** ve **Kullanım Kılavuzu**.
+This project is a **web-based inventory and service management system** developed to simplify the tracking of devices within the company.  
+Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Parameters**, **Reports**, and **User Guide**.
 
-## 🚀 Hızlı Başlangıç
+## 🚀 Quick Start
 
-```bash
-# 1) Sanal ortam (opsiyonel ama önerilir)
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
+1. Create a virtual environment (optional but recommended)  
+   `python -m venv venv`  
+   - Windows: `venv\Scripts\activate`  
+   - macOS/Linux: `source venv/bin/activate`  
 
-# 2) Kurulum
-pip install -r requirements.txt
+2. Install dependencies  
+   `pip install -r requirements.txt`  
 
-# 3) Geliştirme sunucusu
-python app.py  # http://127.0.0.1:5000
-```
+3. Run the development server  
+   `python app.py` → [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-> İlk çalıştırmada `app.db` SQLite veritabanı otomatik oluşur.
+> On the first run, the `app.db` SQLite database will be created automatically.
 
-## 🔑 Özellikler
+## 🛠 Technologies Used
+- **Backend:** Python (Flask), SQLAlchemy  
+- **Frontend:** HTML5, CSS3, Bootstrap, Jinja2  
+- **Database:** SQLite (default), adaptable to MSSQL/PostgreSQL  
+- **Charts & Reports:** Chart.js (interactive graphs), PDF/Excel export  
 
-### 📦 Depo Envanteri (`/depo`)
-- Cihaz ekleme, düzenleme, silme  
-- Arızalı / Normal işaretleme  
-- Miktar takibi  
-- Arama kutusu ile marka, tip, seri kodu vb. alanlarda filtreleme  
+## 🔑 Features
 
-### ⚠️ Arızalı Cihazlar (`/arizali`)
-- Tüm arızalı cihazların listesi  
-- **“Normal Yap”** butonu ile cihazı tekrar kullanılabilir hale getirme  
+### 📦 Inventory (`/depo`)
+- Add, edit, delete devices  
+- Mark as Faulty / Normal  
+- Track quantities  
+- Search box for filtering by brand, type, serial number, etc.  
 
-### 🛠 Servis Geçmişi (`/servis`)
-- Cihazlar için servis kaydı ekleme, düzenleme, silme  
-- **Aynı cihaz için birden fazla açık servis kaydı eklenemez**  
-- **Durum “Tamir Edildi” veya “Teslim Edildi” seçilirse cihaz otomatik olarak arızalı listesinden çıkar**  
+### ⚠️ Faulty Devices (`/arizali`)
+- View all faulty devices  
+- **“Mark as Normal”** button to restore device usability  
 
-### ⚙️ Parametreler (`/parametreler`)
-- Tip, Marka, Model, İşletim Sistemi gibi seçenekler buradan yönetilir  
-- Yeni cihaz ekleme ve arıza ekleme ekranlarında bu parametreler **otomatik listelenir** (elle yazmaya gerek yok)  
+### 🛠 Service History (`/servis`)
+- Add, edit, delete service records for devices  
+- **Multiple open service records for the same device are not allowed**  
+- **If status is set to “Repaired” or “Delivered,” the device is automatically removed from the faulty list**  
 
-### 📊 Raporlar (`/reports`)
-- Envanter, arızalı cihazlar ve servis geçmişine dair **grafiksel raporlar**  
-- Kategori bazlı sayılar ve trend grafikleri  
+### ⚙️ Parameters (`/parametreler`)
+- Manage options such as Type, Brand, Model, Operating System  
+- These parameters are **automatically listed** in new device and fault entry forms (no manual typing needed)  
 
-### 📘 Kullanım Kılavuzu (`/kullanim`)
-- Sistemin kullanımına dair özet bilgiler  
-- Kullanıcıların hızlıca öğrenebilmesi için sade bir dokümantasyon sayfası  
+### 📊 Reports (`/reports`)
+- Graphical reports for inventory, faulty devices, and service history  
+- Category-based statistics and trend charts  
+- **Export reports as PDF or Excel files** for offline use and sharing  
 
-## 🎨 Tasarım
-- Üst kısımda **navbar** bulunur, logoya tıklandığında envanter sayfasına yönlendirir  
-- Aktif sayfa navbar’da **kırmızı alt çizgi** ile belirtilir  
-- Sayfalar arası geçiş menü üzerinden yapılır  
-- Modallar (ekleme/düzenleme pencereleri) **Bootstrap** ile yapılmıştır  
-- Rapor sayfasında **chart.js** ile dinamik grafikler kullanılmıştır  
-- CSS sade tutulmuş, isteğe göre özelleştirilebilir
+### 📘 User Guide (`/kullanim`)
+- Summary information on system usage  
+- Simplified documentation page for quick onboarding  
 
-## 🖼️ Ekran Görselleri
-> Aşağıdaki ekran görüntülerini `screenshots/` klasörüne koyabilir ve buraya ekleyebilirsin:
+## 🎨 Design
+- **Navbar** at the top; clicking the logo redirects to the inventory page  
+- Active page highlighted with a **red underline** in the navbar  
+- Page navigation via the menu  
+- Add/Edit modals built with **Bootstrap**  
+- Reports page uses **chart.js** for interactive graphs  
+- CSS kept minimal but customizable  
 
-- **Depo Envanteri**  
-  ![Depo](screenshots/depo.png)
+## 🖼️ Screenshots
+> Place screenshots in the `screenshots/` folder and reference them here:
 
-- **Arızalı Cihazlar**  
-  ![Arızalı](screenshots/arizali.png)
+- **Inventory**  
+  ![Inventory](screenshots/depo.png)
 
-- **Servis Geçmişi**  
-  ![Servis](screenshots/servis.png)
+- **Faulty Devices**  
+  ![Faulty](screenshots/arizali.png)
 
-- **Parametreler**  
-  ![Parametreler](screenshots/parametreler.png)
+- **Service History**  
+  ![Service](screenshots/servis.png)
 
-- **Raporlar**  
-  ![Raporlar](screenshots/raporlar.png)
+- **Parameters**  
+  ![Parameters](screenshots/parametreler.png)
 
-- **Kullanım Kılavuzu**  
-  ![Kullanım](screenshots/kullanim.png)
+- **Reports**  
+  ![Reports](screenshots/raporlar.png)
 
-## 📝 Notlar
-- Silme işlemlerinde **“Emin misin?”** onayı vardır  
-- Kod **Flask + SQLite + SQLAlchemy** ile yazılmıştır  
-- Gerektiğinde **MSSQL/PostgreSQL** gibi farklı veritabanlarına uyarlanabilir  
-- Proje, **yerel kullanım** için tasarlanmıştır ancak kolayca sunucuya taşınabilir  
+- **User Guide**  
+  ![User Guide](screenshots/kullanim.png)
+
+## 📝 Notes
+- Deletion actions require a **“Are you sure?”** confirmation  
+- Built with **Flask + SQLite + SQLAlchemy**  
+- Can be adapted to other databases such as **MSSQL/PostgreSQL**  
+- Designed for **local use**, but can be easily deployed to a server
+
+## 👨‍💻 Developed By
+**Mehmet TAT**  
+- [GitHub](https://github.com/mexmettat)  
+- [LinkedIn](https://www.linkedin.com/in/mehmettat/)
