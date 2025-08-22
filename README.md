@@ -30,16 +30,22 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 - Add, edit, delete devices  
 - Mark as Faulty / Normal  
 - Track quantities  
-- Search box for filtering by brand, type, serial number, etc.  
+- Search box for filtering by brand, type, serial number, etc. 
 
 ### ⚠️ Faulty Devices (`/arizali`)
 - View all faulty devices  
-- **“Mark as Normal”** button to restore device usability  
+- **“Mark as Normal”** button to restore device usability
+- When a device is deleted, related **service records** are removed via cascade, while **fault records** are cleaned up manually.  
+- This ensures **data integrity** and prevents database relationship errors.  
 
 ### 🛠 Service History (`/servis`)
 - Add, edit, delete service records for devices  
 - **Multiple open service records for the same device are not allowed**  
-- **If status is set to “Repaired” or “Delivered,” the device is automatically removed from the faulty list**  
+- **If status is set to “Repaired” or “Delivered,” the device is automatically removed from the faulty list**
+
+### 🔍 Advanced Search & Pagination  
+- On inventory, faults, and service pages, the **search bar** allows quick filtering by brand, type, serial number, home code, or operating system.  
+- Results are **paginated**, and users can select the number of records per page.  
 
 ### ⚙️ Parameters (`/parametreler`)
 - Manage options such as Type, Brand, Model, Operating System  
@@ -48,7 +54,11 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 ### 📊 Reports (`/reports`)
 - Graphical reports for inventory, faulty devices, and service history  
 - Category-based statistics and trend charts  
-- **Export reports as PDF or Excel files** for offline use and sharing  
+- **Export reports as PDF or Excel files** for offline use and sharing
+- **PDF reports** are generated in a professional corporate layout 
+- **Excel reports** are multi-sheet, including:  
+  - **Summary**, **By Brand**, **By Type**, **Service Records**, and **Fault Records**.  
+- Excel files automatically adjust column widths for readability  
 
 ### 📘 User Guide (`/kullanim`)
 - Summary information on system usage  
