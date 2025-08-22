@@ -205,24 +205,35 @@
                           {% for t in types %}<option value="{{ t }}" {% if d.type==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
                         </select>
                       </div>
+
                       <div class="col-md-6">
                         <label class="form-label">Seri No</label>
-                        <input name="serial" class="form-control" placeholder="Boş bırakılırsa NONE atanır">
+                        <input name="serial" class="form-control" 
+                              value="{{ d.serial }}" 
+                              placeholder="Boş bırakılırsa NONE atanır">
                       </div>
+
                       <div class="col-md-6">
                         <label class="form-label">Home Code</label>
-                        <input name="home_code" class="form-control">
+                        <input name="home_code" class="form-control" 
+                              value="{{ d.home_code }}">
                       </div>
+
                       <div class="col-md-6">
                         <label class="form-label">OS</label>
                         <select name="os" class="form-select">
                           <option value="">—</option>
-                          {% for o in oslist %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+                          {% for o in oslist %}
+                            <option value="{{ o }}" {% if d.os == o %}selected{% endif %}>{{ o }}</option>
+                          {% endfor %}
                         </select>
                       </div>
+
                       <div class="col-md-6">
                         <label class="form-label">Adet</label>
-                        <input name="quantity" type="number" min="1" value="1" class="form-control" required>
+                        <input name="quantity" type="number" min="1" 
+                              value="{{ d.quantity }}" 
+                              class="form-control" required>
                       </div>
             </div>
                   <div class="modal-footer">
