@@ -76,22 +76,29 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 > Place screenshots in the `screenshots/` folder and reference them here:
 
 - **Inventory**  
-  ![Inventory](screenshots/depo.png)
+  ![Inventory](screenshots/depo.jpg)
+  ![Inventory](screenshots/ekleme.jpg)
+  ![Inventory](screenshots/düzenle.jpg)
 
 - **Faulty Devices**  
-  ![Faulty](screenshots/arizali.png)
+  ![Faulty](screenshots/arizali.jpg)
+  ![Faulty](screenshots/arizamevcut.jpg)
+  ![Faulty](screenshots/arizayeni.jpg)
 
 - **Service History**  
-  ![Service](screenshots/servis.png)
+  ![Service](screenshots/servis.jpg)
 
 - **Parameters**  
-  ![Parameters](screenshots/parametreler.png)
+  ![Parameters](screenshots/parametreler.jpg)
 
 - **Reports**  
-  ![Reports](screenshots/raporlar.png)
+  ![Reports](screenshots/raporlar.jpg)
+  ![Reports](screenshots/raporlar2.jpg)
+  ![Reports](screenshots/MAGNAITEXCEL.xlsx)
+  ![Reports](screenshots/MAGNAITPDF.jpg)
 
 - **User Guide**  
-  ![User Guide](screenshots/kullanim.png)
+  ![User Guide](screenshots/kullanim.jpg)
 
 ## 📝 Notes
 - Deletion actions require a **“Are you sure?”** confirmation  
