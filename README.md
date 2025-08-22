@@ -95,6 +95,10 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
   ![Reports](screenshots/raporlar.jpg)
   ![Reports](screenshots/raporlar2.jpg)
 
+- **Example Reports**
+  [Download Example PDF Report](screenshots/MAGNAreport.pdf)
+  [Download Example Excel Report](screenshots/MAGNAreport.xlsx)
+
 - **User Guide**  
   ![User Guide](screenshots/kullanim.jpg)
 
