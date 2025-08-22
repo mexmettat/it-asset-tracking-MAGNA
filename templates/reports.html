@@ -6,6 +6,7 @@
   <title>Raporlar · MAGNA IT</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/magna-icon.png') }}">
 
   <style>
@@ -29,6 +30,21 @@
     .chart-wrap.sm{height:300px}
     .legend-note{font-size:.85rem;color:var(--muted)}
     .footer{background:#f9fafb;color:#6b7280;text-align:center;padding:10px;font-size:14px;border-top:1px solid #e5e7eb;margin-top:20px;}
+    .export-group { gap:.5rem; }
+    .btn-export{
+      display:inline-flex; align-items:center; gap:.5rem;
+      border-radius:999px; padding:.45rem .9rem;
+      font-weight:600; border:1px solid transparent;
+      box-shadow:0 6px 14px rgba(16,24,40,.06);
+      transition:.15s ease;
+    }
+    .btn-export i{ font-size:1.05rem; line-height:1; }
+
+    .btn-soft-success{ background:#E8F5E9; color:#1E7E34; border-color:#C8E6C9; }
+    .btn-soft-success:hover{ background:#DFF3E3; color:#155724; transform:translateY(-1px); }
+
+    .btn-soft-danger{ background:#FDECEC; color:#B42318; border-color:#F8C7C7; }
+    .btn-soft-danger:hover{ background:#FADADA; color:#912018; transform:translateY(-1px); }
   </style>
 </head>
 <body class="bg-light">
@@ -66,10 +82,20 @@
         <div class="section-title mb-0">Genel Durum Raporları</div>
         <div class="subtle">Toplam cihazların mevcut durum dağılımı ve markaya göre özet.</div>
       </div>
-      <div class="d-flex gap-2">
-        <a class="btn btn-success btn-sm" href="{{ url_for('reports_download_excel') or '/reports/download/excel' }}">📥 Excel</a>
-        <a class="btn btn-danger btn-sm"  href="{{ url_for('reports_download_pdf') or '/reports/download/pdf' }}">📥 PDF</a>
+
+      <div class="d-flex export-group">
+        <a class="btn btn-export btn-soft-success"
+          href="{{ url_for('reports_download_excel') or '/reports/download/excel' }}"
+          title="Excel olarak indir" rel="noopener">
+          <i class="bi bi-file-earmark-excel"></i><span>Excel</span>
+        </a>
+        <a class="btn btn-export btn-soft-danger"
+          href="{{ url_for('reports_download_pdf') or '/reports/download/pdf' }}"
+          title="PDF olarak indir" rel="noopener">
+          <i class="bi bi-filetype-pdf"></i><span>PDF</span>
+        </a>
       </div>
+
     </div>
     <div class="card-body">
       <div class="row g-4">
@@ -164,13 +190,48 @@
     options:{...baseOpts,plugins:{legend:{position:'bottom'},datalabels:{color:'#111',formatter:(v,ctx)=>{const total=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+(b||0),0)||1;const pct=Math.round((v/total)*100);return `${v} • ${pct}%`;},font:{weight:'600'}}},cutout:'58%'},plugins:[ChartDataLabels]
   });
 
-  function makeBar(id,labels,values,color,xTitle,yTitle){
-    return new Chart(document.getElementById(id),{type:'bar',
-      data:{labels,datasets:[{data:values,backgroundColor:color,borderRadius:6,maxBarThickness:46}]},
-      options:{...baseOpts,plugins:{legend:{display:false},tooltip:{enabled:true},datalabels:valueLabels},
-        scales:{x:axis(xTitle),y:{...axis(yTitle),beginAtZero:true,ticks:{stepSize:1,precision:0}}}},plugins:[ChartDataLabels]
-    });
-  }
+  function makeBar(id, labels, values, color, xTitle, yTitle){
+  return new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: color,
+        borderRadius: 6,
+        maxBarThickness: 46
+      }]
+    },
+    options: {
+      ...baseOpts,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: true },
+        datalabels: valueLabels
+      },
+      layout: { padding: { bottom: 8 } },
+      scales: {
+        x: {
+          ...axis(xTitle),
+          grid: { display: false },
+          ticks: {
+            // TAM isimleri göster, 45° eğik
+            autoSkip: false,
+            maxRotation: 45,
+            minRotation: 45,
+            font: { size: 11 }
+          }
+        },
+        y: {
+          ...axis(yTitle),
+          beginAtZero: true,
+          ticks: { stepSize: 1, precision: 0 }
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+}
 
   function buildStackedBrand(){
     const set=new Set([...(D.healthy_brand_labels||[]),...(D.faulty_brand_labels||[]),...(D.service_brand_labels||[])]);
@@ -188,16 +249,41 @@
   makeBar('barFaultyBrand' ,D.faulty_brand_labels ,D.faulty_brand_values ,red ,'Marka','Adet');
 
   new Chart(document.getElementById('barTotalBrand'),{
-    type:'bar',
-    data:{labels:STACK.labels,datasets:[
-      {label:'Sağlam',data:STACK.healthy,backgroundColor:teal,borderRadius:6,maxBarThickness:46},
-      {label:'Arızalı',data:STACK.faulty ,backgroundColor:red ,borderRadius:6,maxBarThickness:46},
-      {label:'Serviste',data:STACK.service,backgroundColor:amber,borderRadius:6,maxBarThickness:46},
-    ]},
-    options:{...baseOpts,plugins:{legend:{position:'bottom'},tooltip:{enabled:true},datalabels:{display:false}},
-      scales:{x:{...axis('Marka'),stacked:true},y:{...axis('Adet'),stacked:true,beginAtZero:true,ticks:{stepSize:1,precision:0}}}
+  type:'bar',
+  data:{
+    labels: STACK.labels,
+    datasets:[
+      {label:'Sağlam',   data:STACK.healthy, backgroundColor:teal,   borderRadius:6, maxBarThickness:46},
+      {label:'Arızalı',  data:STACK.faulty,  backgroundColor:red,    borderRadius:6, maxBarThickness:46},
+      {label:'Serviste', data:STACK.service, backgroundColor:amber,  borderRadius:6, maxBarThickness:46},
+    ]
+  },
+  options:{
+    ...baseOpts,
+    plugins:{ legend:{position:'bottom'}, tooltip:{enabled:true}, datalabels:{display:false} },
+    layout:{ padding:{ bottom:8 } },
+    scales:{
+      x:{
+        ...axis('Marka'),
+        stacked:true,
+        grid:{ display:false },
+        ticks:{
+          autoSkip:false,
+          maxRotation:45,
+          minRotation:45,
+          font:{ size:11 }
+        }
+      },
+      y:{
+        ...axis('Adet'),
+        stacked:true,
+        beginAtZero:true,
+        ticks:{ stepSize:1, precision:0 }
+      }
     }
-  });
+  }
+});
+
 
   makeBar('barServiceBrand',D.service_brand_labels,D.service_brand_values,amber,'Marka','Adet');
   makeBar('barHealthyType' ,D.healthy_type_labels ,D.healthy_type_values ,teal ,'Tip','Adet');
