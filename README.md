@@ -95,6 +95,8 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
   ![Reports](screenshots/raporlar.jpg)
   ![Reports](screenshots/raporlar2.jpg)
 
+> You can click the "view rar" for excel file and download it but you can see PDF file when clicked it.
+
 - **Example Reports**
   [Download Example PDF Report](screenshots/MAGNAreport.pdf)
   [Download Example Excel Report](screenshots/MAGNAreport.xlsx)
