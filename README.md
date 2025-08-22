@@ -94,8 +94,6 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 - **Reports**  
   ![Reports](screenshots/raporlar.jpg)
   ![Reports](screenshots/raporlar2.jpg)
-  ![Reports](screenshots/MAGNAITEXCEL.xlsx)
-  ![Reports](screenshots/MAGNAITPDF.jpg)
 
 - **User Guide**  
   ![User Guide](screenshots/kullanim.jpg)
