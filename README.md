@@ -1,4 +1,4 @@
-# MAGNA — IT Inventory & Service Tracking
+# IT Inventory & Service Tracking
 
 This project is a **web-based inventory and service management system** developed to simplify the tracking of devices within the company.  
 Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Parameters**, **Reports**, and **User Guide**.
@@ -28,15 +28,24 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 
 ### 📦 Inventory (`/depo`)
 - Add, edit, delete devices  
-- Mark as Faulty / Normal  
+- Mark as Faulty / Normal / Service / In Use 
 - Track quantities  
-- Search box for filtering by brand, type, serial number, etc. 
+- Search box for filtering by brand, type, serial number, etc.
+- While a device is **In Use** or **In Service**, inventory actions (`edit / delete / mark as faulty`) are **disabled**.
 
 ### ⚠️ Faulty Devices (`/arizali`)
 - View all faulty devices  
 - **“Mark as Normal”** button to restore device usability
 - When a device is deleted, related **service records** are removed via cascade, while **fault records** are cleaned up manually.  
-- This ensures **data integrity** and prevents database relationship errors.  
+- This ensures **data integrity** and prevents database relationship errors.
+
+### 👥 Devices in Use (`/inuse`)
+- **Assign to User:**  
+  - Only devices that are in stock and available (not faulty / not in service) can be assigned.  
+  - Assign to a user with name and assignment date.  
+- **Return Process:**  
+  - Healthy return → device goes back to **Inventory (Healthy)**.  
+  - Faulty return → device moves to **Faulty Inventory**.
 
 ### 🛠 Service History (`/servis`)
 - Add, edit, delete service records for devices  
