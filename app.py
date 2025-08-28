@@ -46,7 +46,16 @@ class Device(db.Model):
     is_faulty = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    service_records = db.relationship("ServiceRecord", backref="device", cascade="all, delete-orphan")
+     # İlişkiler: hepsi back_populates ile
+    service_records = db.relationship(
+        "ServiceRecord", back_populates="device", cascade="all, delete-orphan"
+    )
+    faults = db.relationship(
+        "Fault", back_populates="device", cascade="all, delete-orphan"
+    )
+    usages = db.relationship(
+        "Usage", back_populates="device", cascade="all, delete-orphan"
+    )
 
 class ServiceRecord(db.Model):
     __tablename__ = "service_records"
@@ -58,6 +67,7 @@ class ServiceRecord(db.Model):
     cost = db.Column(db.Float, default=0.0)
     return_date = db.Column(db.Date)  # ⇠ servisten dönüş tarihi
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    device = db.relationship("Device", back_populates="service_records")
 
 class Parameter(db.Model):
     __tablename__ = "parameters"
@@ -73,8 +83,17 @@ class Fault(db.Model):
     is_open = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     resolved_at = db.Column(db.DateTime)
+    device = db.relationship("Device", back_populates="faults")
 
-    device = db.relationship("Device", backref="faults")
+class Usage(db.Model):
+    __tablename__ = "usages"
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), nullable=False)
+    user_name = db.Column(db.String(120), nullable=False)
+    assigned_date = db.Column(db.Date, default=datetime.utcnow)
+    return_date = db.Column(db.Date)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    device = db.relationship("Device", back_populates="usages")
 
 # --- One-time init ---
 with app.app_context():
@@ -105,6 +124,27 @@ def _split_list(text: str):
 def get_param_list(key: str):
     p = Parameter.query.filter_by(key=key).first()
     return _split_list(p.value if p else "")
+
+def _open_fault_if_missing(device_id: int, title: str):
+    open_fault = Fault.query.filter_by(device_id=device_id, is_open=True).first()
+    if not open_fault:
+        db.session.add(Fault(device_id=device_id, title=title, is_open=True))
+
+def device_is_locked(device_id: int) -> bool:
+    """Cihaz aktif kullanımda mı veya açık serviste mi?"""
+    in_use = (
+        db.session.query(Usage.id)
+        .filter(Usage.device_id == device_id, Usage.is_active.is_(True))
+        .first()
+        is not None
+    )
+    in_service = (
+        db.session.query(ServiceRecord.id)
+        .filter(ServiceRecord.device_id == device_id, ServiceRecord.status.in_(list(OPEN_STATUSES)))
+        .first()
+        is not None
+    )
+    return in_use or in_service
 
 def set_param_list(key: str, values: list[str]):
     """Listeyi benzersiz & sıralı tutarak kaydeder (her satıra bir öğe)."""
@@ -169,6 +209,26 @@ def inventory():
     types  = get_param_list("types")         # örn: Laptop PC, Monitor, ...
     oslist = get_param_list("os_list")       # örn: WIN11 23H2, WIN10 21H2 ...
 
+    # aktif kullanımda olan cihazlar
+    active_usage_ids = {
+        row[0]
+        for row in (
+            db.session.query(Usage.device_id)
+            .filter(Usage.is_active.is_(True))
+            .distinct()
+            .all()
+        )
+    }
+    open_service_ids = {
+        row[0]
+        for row in (
+            db.session.query(ServiceRecord.device_id)
+            .filter(ServiceRecord.status.in_(list(OPEN_STATUSES)))
+            .distinct()
+            .all()
+        )
+    }
+
     return render_template(
         "inventory.html",
         pagination=pagination,
@@ -177,6 +237,8 @@ def inventory():
         types=types,
         oslist=oslist,
         per_page=per_page,
+        active_usage_ids=active_usage_ids,
+        open_service_ids=open_service_ids,
     )
 
 @app.route("/inventory/add", methods=["POST"])
@@ -210,10 +272,15 @@ def inventory_add():
 
 @app.route("/inventory/update/<int:id>", methods=["POST"])
 def inventory_update(id):
+    if device_is_locked(id):
+        flash("Bu cihaz şu anda kullanımda veya serviste. Düzenleme yapılamaz.", "error")
+        return redirect(url_for("inventory"))
+
     dev = Device.query.get_or_404(id)
     dev.brand = request.form.get("brand", dev.brand).strip()
     dev.type = request.form.get("type", dev.type).strip()
     new_serial = request.form.get("serial", dev.serial).strip()
+
     if not new_serial:
         # Boş bırakıldıysa -> NONE serisi üret
         base = "NONE"
@@ -240,6 +307,10 @@ def inventory_update(id):
 
 @app.route("/inventory/delete/<int:id>", methods=["POST"])
 def inventory_delete(id):
+    if device_is_locked(id):
+        flash("Bu cihaz kullanımda veya servisteyken silinemez.", "error")
+        return redirect(url_for("inventory"))
+
     # Fault kayıtlarını sil (ilişkide cascade yoksa FK hatası olmasın)
     Fault.query.filter_by(device_id=id).delete(synchronize_session=False)
     # ServiceRecord'lar cascade ile silinir (modelde tanımlı)
@@ -251,6 +322,10 @@ def inventory_delete(id):
 
 @app.route("/inventory/mark_faulty/<int:id>", methods=["POST"])
 def inventory_mark_faulty(id):
+    if device_is_locked(id):
+        flash("Cihaz kullanımda veya servisteyken arızalı işaretlenemez.", "error")
+        return redirect(url_for("inventory"))
+
     dev = Device.query.get_or_404(id)
     dev.is_faulty = True
     # Eğer açık fault yoksa, varsayılan başlıkla bir fault aç
@@ -611,6 +686,116 @@ def params_item_delete(key):
     flash("Silindi.", "ok")
     return redirect(url_for("params"))
 
+
+# --- kullanımda liste ---
+@app.route("/inuse")
+def inuse():
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+
+    base = Usage.query.join(Device, Usage.device_id == Device.id).filter(Usage.is_active.is_(True))
+    if q:
+        like = f"%{q}%"
+        base = base.filter(db.or_(
+            Usage.user_name.ilike(like),
+            Device.brand.ilike(like),
+            Device.type.ilike(like),
+            Device.serial.ilike(like),
+            Device.home_code.ilike(like),
+            Device.os.ilike(like),
+        ))
+        page = 1
+
+    pagination = base.order_by(Usage.assigned_date.desc(), Usage.id.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    open_service_ids = {
+    row[0]
+    for row in (
+        db.session.query(ServiceRecord.device_id)
+        .filter(ServiceRecord.status.in_(list(OPEN_STATUSES)))
+        .distinct()
+        .all()
+    )
+    }
+    active_usage_ids = {
+        row[0]
+        for row in (
+            db.session.query(Usage.device_id)
+            .filter(Usage.is_active.is_(True))
+            .distinct()
+            .all()
+        )
+    }
+
+    devices = (
+        Device.query
+        .filter(Device.is_faulty.is_(False))
+        .filter(~Device.id.in_(open_service_ids))
+        .filter(~Device.id.in_(active_usage_ids))
+        .order_by(Device.brand.asc(), Device.serial.asc())
+        .all()
+    )
+    return render_template("inuse.html", pagination=pagination, devices=devices, q=q, per_page=per_page)
+
+# --- kullanıma ver ---
+@app.route("/usage/add", methods=["POST"])
+def usage_add():
+    device_id = request.form.get("device_id", type=int)
+    user_name = (request.form.get("user_name") or "").strip()
+    assigned_date = parse_date_optional(request.form.get("assigned_date")) or datetime.utcnow().date()
+
+    if not device_id or not user_name:
+        flash("Cihaz ve kullanıcı adı zorunludur.", "error")
+        return redirect(url_for("inuse"))
+
+    # hâlihazırda aktif kullanım varsa engelle
+    if Usage.query.filter_by(device_id=device_id, is_active=True).count() > 0:
+        flash("Bu cihaz zaten kullanımda.", "error")
+        return redirect(url_for("inuse"))
+
+    usage = Usage(device_id=device_id, user_name=user_name, assigned_date=assigned_date, is_active=True)
+    db.session.add(usage)
+    db.session.commit()
+    flash("Cihaz kullanıma verildi.", "ok")
+    return redirect(url_for("inuse"))
+
+# --- İADE: sağlam veya arızalı ---
+@app.route("/usage/return/<int:id>", methods=["POST"])
+def usage_return(id):
+    u = Usage.query.get_or_404(id)
+    if not u.is_active:
+        flash("Kayıt zaten kapatılmış.", "info")
+        return redirect(url_for("inuse"))
+
+    condition = (request.form.get("return_condition") or "ok").lower()  # "ok" | "faulty"
+    u.is_active = False
+    u.return_date = datetime.utcnow().date()
+
+    dev = u.device
+    if condition == "faulty":
+        # Arızalı iade: cihazı arızalı yap + açık fault aç
+        dev.is_faulty = True
+        _open_fault_if_missing(dev.id, f"Kullanıcıdan arızalı iade ({dev.serial})")
+        flash("Cihaz arızalı olarak depoya iade alındı.", "ok")
+    else:
+        # Sağlam iade: cihazı normal yap
+        dev.is_faulty = False
+        flash("Cihaz sağlam olarak depoya iade alındı.", "ok")
+
+    db.session.commit()
+    return redirect(url_for("inuse"))
+
+# --- (opsiyonel) kullanım kaydını sil ---
+@app.route("/usage/delete/<int:id>", methods=["POST"])
+def usage_delete(id):
+    u = Usage.query.get_or_404(id)
+    db.session.delete(u)
+    db.session.commit()
+    flash("Kullanım kaydı silindi.", "ok")
+    return redirect(url_for("inuse"))
+
 # -------- REPORTS --------
 @app.route("/reports")
 def reports():
@@ -622,16 +807,31 @@ def reports():
     )
     open_device_ids = {row[0] for row in open_q.all()}
 
-    # Tüm cihazlar
+    # Aktif kullanımda olan cihazlar
+    in_use_device_ids = {
+        row[0]
+        for row in (
+            db.session.query(Usage.device_id)
+            .filter(Usage.return_date.is_(None))
+            .distinct()
+            .all()
+        )
+    }
+
     all_devices = Device.query.all()
 
-    # Sayımlar (genel durum)
-    faulty_count = sum(1 for d in all_devices if d.is_faulty)
+    # ---- sayımlar ----
+    faulty_count  = sum(1 for d in all_devices if d.is_faulty)
     service_count = sum(1 for d in all_devices if d.id in open_device_ids)
-    healthy_count = sum(1 for d in all_devices if (not d.is_faulty) and (d.id not in open_device_ids))
+    inuse_count   = sum(1 for d in all_devices if d.id in in_use_device_ids)
+    healthy_count = sum(
+        1 for d in all_devices
+        if (not d.is_faulty) and (d.id not in open_device_ids) and (d.id not in in_use_device_ids)
+    )
 
-    # ---------- Gruplamalar (marka ve tip) ----------
+    # ---- gruplamalar yardımcı ----
     def count_by(attr, iterable):
+        from collections import defaultdict
         c = defaultdict(int)
         for x in iterable:
             key = getattr(x, attr) or "—"
@@ -640,35 +840,62 @@ def reports():
         values = [c[k] for k in labels]
         return labels, values
 
-    # Sağlam (depoda) cihazlar
-    healthy_devices = [d for d in all_devices if (not d.is_faulty) and (d.id not in open_device_ids)]
+    # listeler
+    healthy_devices = [d for d in all_devices
+                       if (not d.is_faulty) and (d.id not in open_device_ids) and (d.id not in in_use_device_ids)]
+    faulty_devices  = [d for d in all_devices if d.is_faulty]
+    service_devices = Device.query.filter(Device.id.in_(open_device_ids)).all()
+    inuse_devices   = Device.query.filter(Device.id.in_(in_use_device_ids)).all()
+
+    # marka/tipe göre
     healthy_brand_labels, healthy_brand_values = count_by("brand", healthy_devices)
     healthy_type_labels,  healthy_type_values  = count_by("type",  healthy_devices)
 
-    # Arızalı cihazlar
-    faulty_devices = [d for d in all_devices if d.is_faulty]
-    faulty_brand_labels, faulty_brand_values = count_by("brand", faulty_devices)
-    faulty_type_labels,  faulty_type_values  = count_by("type",  faulty_devices)
+    faulty_brand_labels,  faulty_brand_values  = count_by("brand", faulty_devices)
+    faulty_type_labels,   faulty_type_values   = count_by("type",  faulty_devices)
 
-    # Servisteki cihazlar
-    service_devices = Device.query.filter(Device.id.in_(open_device_ids)).all()
     service_brand_labels, service_brand_values = count_by("brand", service_devices)
     service_type_labels,  service_type_values  = count_by("type",  service_devices)
 
+    inuse_brand_labels,   inuse_brand_values   = count_by("brand", inuse_devices)
+    inuse_type_labels,    inuse_type_values    = count_by("type",  inuse_devices)
+
+    # Kullanımdaki kayıtlar (kullanıcı dağılımı)
+    active_usages = (
+        Usage.query.filter(Usage.return_date.is_(None))
+        .join(Device, Usage.device_id == Device.id)
+        .all()
+    )
+    from collections import defaultdict
+    user_count = defaultdict(int)
+    for u in active_usages:
+        user_count[(u.user_name or "—")] += 1
+    inuse_user_labels  = list(user_count.keys())
+    inuse_user_values  = [user_count[k] for k in inuse_user_labels]
+
     return render_template(
         "reports.html",
-        # genel durum
+        # genel durum + yeni "inuse_count"
         healthy_count=healthy_count,
         faulty_count=faulty_count,
         service_count=service_count,
-        # markaya göre
+        inuse_count=inuse_count,
+
+        # marka
         healthy_brand_labels=healthy_brand_labels, healthy_brand_values=healthy_brand_values,
         faulty_brand_labels=faulty_brand_labels,   faulty_brand_values=faulty_brand_values,
         service_brand_labels=service_brand_labels, service_brand_values=service_brand_values,
-        # tipe göre
+        inuse_brand_labels=inuse_brand_labels,     inuse_brand_values=inuse_brand_values,
+
+        # tip
         healthy_type_labels=healthy_type_labels, healthy_type_values=healthy_type_values,
         faulty_type_labels=faulty_type_labels,   faulty_type_values=faulty_type_values,
         service_type_labels=service_type_labels, service_type_values=service_type_values,
+        inuse_type_labels=inuse_type_labels,     inuse_type_values=inuse_type_values,
+
+        # kullanıcı
+        inuse_user_labels=inuse_user_labels,
+        inuse_user_values=inuse_user_values,
     )
 
 # ---------------------------
@@ -707,12 +934,38 @@ def df_from_query(query, columns=None, mapper=None):
 # ---------------------------
 @app.route("/reports/download/excel")
 def reports_download_excel():
-    # 1) Tüm temel tablolar
-    devices_q = Device.query.order_by(Device.created_at.desc())
+    import io
+    from openpyxl.utils import get_column_letter
+    import pandas as pd
+    from collections import defaultdict
+
+    # ---------- Sorgular ----------
+    devices_q  = Device.query.order_by(Device.created_at.desc())
     services_q = ServiceRecord.query.order_by(ServiceRecord.service_date.desc(), ServiceRecord.id.desc())
     faults_q   = Fault.query.order_by(Fault.created_at.desc())
 
-    # Cihazlar sayfası için okunaklı kolonlar
+    # Kullanımda (iade edilmemiş) cihazlar
+    inuse_q = (
+        Usage.query
+        .filter(Usage.return_date.is_(None))
+        .order_by(Usage.assigned_date.desc(), Usage.id.desc())
+    )
+
+    # ---------- İlişkisiz güvenli erişim için cihaz cache'i ----------
+    fault_rows   = faults_q.all()
+    service_rows = services_q.all()
+    inuse_rows   = inuse_q.all()
+
+    dev_ids = set()
+    dev_ids.update([getattr(f, "device_id", None) for f in fault_rows   if getattr(f, "device_id", None)])
+    dev_ids.update([getattr(s, "device_id", None) for s in service_rows if getattr(s, "device_id", None)])
+    dev_ids.update([getattr(u, "device_id", None) for u in inuse_rows   if getattr(u, "device_id", None)])
+
+    device_cache = {d.id: d for d in Device.query.filter(Device.id.in_(dev_ids)).all()}
+    def get_dev(did):
+        return device_cache.get(did)
+
+    # ---------- DataFrame yardımcıları ----------
     def device_map(d: Device):
         return {
             "ID": d.id,
@@ -723,45 +976,64 @@ def reports_download_excel():
             "OS": d.os,
             "Adet": d.quantity,
             "Arızalı mı?": "Evet" if d.is_faulty else "Hayır",
-            "Depo Tarihi": d.created_at.strftime("%Y-%m-%d"),
+            "Depo Tarihi": d.created_at.strftime("%Y-%m-%d") if d.created_at else None,
         }
 
-    # Servisler için okunaklı kolonlar (+ ilişki alanlarından marka/tip/seri)
     def service_map(s: ServiceRecord):
+        d = get_dev(getattr(s, "device_id", None))
         return {
             "Kayıt ID": s.id,
-            "Cihaz ID": s.device_id,
-            "Marka": getattr(s.device, "brand", None),
-            "Tip": getattr(s.device, "type", None),
-            "Seri No": getattr(s.device, "serial", None),
-            "Gönderim Tarihi": s.service_date.strftime("%Y-%m-%d") if s.service_date else None,
-            "Durum": s.status,
-            "Açıklama": s.description,
-            "Maliyet": s.cost,
-            "Dönüş Tarihi": s.return_date.strftime("%Y-%m-%d") if s.return_date else None,
-            "Oluşturma": s.created_at.strftime("%Y-%m-%d"),
+            "Cihaz ID": getattr(s, "device_id", None),
+            "Marka": getattr(d, "brand", None),
+            "Tip": getattr(d, "type", None),
+            "Seri No": getattr(d, "serial", None),
+            "Gönderim Tarihi": s.service_date.strftime("%Y-%m-%d") if getattr(s, "service_date", None) else None,
+            "Durum": getattr(s, "status", None),
+            "Açıklama": getattr(s, "description", None),
+            "Maliyet": getattr(s, "cost", None),
+            "Dönüş Tarihi": s.return_date.strftime("%Y-%m-%d") if getattr(s, "return_date", None) else None,
+            "Oluşturma": s.created_at.strftime("%Y-%m-%d") if getattr(s, "created_at", None) else None,
         }
 
-    # Arızalar için okunaklı kolonlar
     def fault_map(f: Fault):
+        d = get_dev(getattr(f, "device_id", None))
         return {
             "Kayıt ID": f.id,
-            "Cihaz ID": f.device_id,
-            "Marka": getattr(f.device, "brand", None),
-            "Tip": getattr(f.device, "type", None),
-            "Seri No": getattr(f.device, "serial", None),
-            "Başlık": f.title,
-            "Açık mı?": "Evet" if f.is_open else "Hayır",
-            "Oluşturma": f.created_at.strftime("%Y-%m-%d"),
-            "Çözüm Tarihi": f.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if f.resolved_at else None,
+            "Cihaz ID": getattr(f, "device_id", None),
+            "Marka": getattr(d, "brand", None),
+            "Tip": getattr(d, "type", None),
+            "Seri No": getattr(d, "serial", None),
+            "Başlık": getattr(f, "title", None),
+            "Açık mı?": "Evet" if getattr(f, "is_open", False) else "Hayır",
+            "Oluşturma": f.created_at.strftime("%Y-%m-%d") if getattr(f, "created_at", None) else None,
+            "Çözüm Tarihi": f.resolved_at.strftime("%Y-%m-%d %H:%M:%S") if getattr(f, "resolved_at", None) else None,
         }
 
-    df_devices  = df_from_query(devices_q, mapper=device_map)
-    df_services = df_from_query(services_q, mapper=service_map)
-    df_faults   = df_from_query(faults_q,   mapper=fault_map)
+    def usage_map(u: Usage):
+        d = get_dev(getattr(u, "device_id", None))
+        return {
+            "Kullanım ID": u.id,
+            "Kullanıcı": getattr(u, "user_name", None),
+            "Veriliş Tarihi": u.assigned_date.strftime("%Y-%m-%d") if getattr(u, "assigned_date", None) else None,
+            "Cihaz ID": getattr(u, "device_id", None),
+            "Marka": getattr(d, "brand", None),
+            "Tip": getattr(d, "type", None),
+            "Seri No": getattr(d, "serial", None),
+            "Home Code": getattr(d, "home_code", None),
+            "OS": getattr(d, "os", None),
+        }
 
-    # 2) Özetler (genel, markaya göre, tipe göre)
-    # Sağlam = not is_faulty ve açık servis kaydı yok
+    def to_df(rows, mapper):
+        rows = rows if isinstance(rows, list) else rows.all()
+        return pd.DataFrame([mapper(r) for r in rows])
+
+    # ---------- DataFrame'ler ----------
+    df_devices  = to_df(devices_q, device_map)
+    df_services = to_df(service_rows, service_map)
+    df_faults   = to_df(fault_rows,   fault_map)
+    df_inuse    = to_df(inuse_rows,   usage_map)
+
+    # Sağlam / Servis / Arızalı kümeleri
     open_service_device_ids = {
         row[0]
         for row in (
@@ -771,59 +1043,67 @@ def reports_download_excel():
             .all()
         )
     }
-
     all_devices = devices_q.all()
     healthy = [d for d in all_devices if (not d.is_faulty) and (d.id not in open_service_device_ids)]
     faulty  = [d for d in all_devices if d.is_faulty]
     service = [d for d in all_devices if d.id in open_service_device_ids]
+    inuse_devices = [get_dev(u.device_id) for u in inuse_rows if get_dev(u.device_id)]
 
+    # Özet
     df_summary = pd.DataFrame(
         [
-            {"Kategori": "Sağlam Depoda", "Adet": len(healthy)},
-            {"Kategori": "Arızalı Depoda", "Adet": len(faulty)},
-            {"Kategori": "Serviste",       "Adet": len(service)},
-            {"Kategori": "Toplam",         "Adet": len(all_devices)},
+            {"Kategori": "Kullanımda",       "Adet": len(inuse_devices)},
+            {"Kategori": "Serviste",         "Adet": len(service)},
+            {"Kategori": "Arızalı Depoda",   "Adet": len(faulty)},
+            {"Kategori": "Sağlam Depoda",    "Adet": len(healthy)},
+            {"Kategori": "Toplam Cihaz",     "Adet": len(all_devices)},
         ]
     )
 
-    def count_by(items, key):
-        from collections import defaultdict
+    # Dağılım yardımcıları
+    def count_df(items, attr, colname):
         c = defaultdict(int)
         for x in items:
-            c[getattr(x, key) or "—"] += 1
-        return pd.DataFrame({"Değer": list(c.keys()), "Adet": list(c.values())})
+            c[getattr(x, attr) or "—"] += 1
+        return pd.DataFrame({colname: list(c.keys()), "Adet": list(c.values())})
 
-    df_brand_healthy = count_by(healthy, "brand")
-    df_brand_faulty  = count_by(faulty, "brand")
-    df_brand_service = count_by(service, "brand")
+    # Markaya göre
+    df_brand_healthy = count_df(healthy, "brand", "Marka")
+    df_brand_faulty  = count_df(faulty,  "brand", "Marka")
+    df_brand_service = count_df(service, "brand", "Marka")
+    df_brand_inuse   = count_df(inuse_devices, "brand", "Marka")
 
-    df_type_healthy  = count_by(healthy, "type")
-    df_type_faulty   = count_by(faulty, "type")
-    df_type_service  = count_by(service, "type")
+    # Tip'e göre
+    df_type_healthy  = count_df(healthy, "type", "Tip")
+    df_type_faulty   = count_df(faulty,  "type", "Tip")
+    df_type_service  = count_df(service, "type", "Tip")
+    df_type_inuse    = count_df(inuse_devices, "type", "Tip")
 
-    # 3) Excel'e yaz
+    # ---------- Excel yaz ----------
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         # Ana sayfalar
-        df_devices.to_excel(writer, index=False, sheet_name="Cihazlar")
+        df_devices.to_excel(writer,  index=False, sheet_name="Cihazlar")
         df_services.to_excel(writer, index=False, sheet_name="Servis Kayıtları")
-        df_faults.to_excel(writer, index=False, sheet_name="Arıza Kayıtları")
+        df_faults.to_excel(writer,   index=False, sheet_name="Arıza Kayıtları")
+        df_inuse.to_excel(writer,    index=False, sheet_name="Kullanımda")
 
-        # Özet sayfası
+        # Özet
         df_summary.to_excel(writer, index=False, sheet_name="Özet")
 
-        # Dağılım sayfası (Marka)
+        # Dağılım sayfaları (Marka)
         df_brand_healthy.to_excel(writer, index=False, sheet_name="Marka-Sağlam")
-        df_brand_faulty.to_excel(writer, index=False, sheet_name="Marka-Arızalı")
+        df_brand_faulty.to_excel(writer,  index=False, sheet_name="Marka-Arızalı")
         df_brand_service.to_excel(writer, index=False, sheet_name="Marka-Serviste")
+        df_brand_inuse.to_excel(writer,   index=False, sheet_name="Marka-Kullanımda")
 
-        # Dağılım sayfası (Tip)
+        # Dağılım sayfaları (Tip)
         df_type_healthy.to_excel(writer, index=False, sheet_name="Tip-Sağlam")
-        df_type_faulty.to_excel(writer, index=False, sheet_name="Tip-Arızalı")
+        df_type_faulty.to_excel(writer,  index=False, sheet_name="Tip-Arızalı")
         df_type_service.to_excel(writer, index=False, sheet_name="Tip-Serviste")
+        df_type_inuse.to_excel(writer,   index=False, sheet_name="Tip-Kullanımda")
 
-        # Basit auto-fit / genişlik ayarı (OpenPyXL ile küçük yardım)
-        from openpyxl.utils import get_column_letter
+        # Auto-fit sütun genişlikleri
         for sheet_name in writer.book.sheetnames:
             ws = writer.book[sheet_name]
             for col in ws.columns:
@@ -831,7 +1111,7 @@ def reports_download_excel():
                 col_letter = get_column_letter(col[0].column)
                 for cell in col:
                     try:
-                        max_len = max(max_len, len(str(cell.value)))
+                        max_len = max(max_len, len(str(cell.value)) if cell.value is not None else 0)
                     except Exception:
                         pass
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 40)
@@ -839,6 +1119,7 @@ def reports_download_excel():
     output.seek(0)
     fname = f"Rapor_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return send_file(output, download_name=fname, as_attachment=True)
+
 
 def _register_fonts():
     """Montserrat varsa kaydeder; hata olursa sessizce Helvetica kullanılır."""
@@ -976,6 +1257,13 @@ def reports_download_pdf():
     faulty  = [d for d in all_devices if d.is_faulty]
     service = [d for d in all_devices if d.id in open_service_device_ids]
 
+    inuse_devices = (
+        db.session.query(Device)
+        .join(Usage, Usage.device_id == Device.id)
+        .filter(Usage.return_date.is_(None))
+        .all()
+    )
+
     # 3) PDF belge
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -1053,6 +1341,47 @@ def reports_download_pdf():
     add_type_section("Sağlam (Depoda)", healthy)
     add_type_section("Arızalı (Depoda)", faulty)
     add_type_section("Serviste", service)
+
+    # --- Kullanım bölümü (PDF) ---
+    elems.append(PageBreak())
+    elems.append(Paragraph("Kullanımda Olan Cihazlar", styles["H2"]))
+
+    # Özet kutusu
+    usage_summary = [
+        ["Kategori", "Adet"],
+        ["Kullanımda", len(inuse_devices)],
+    ]
+    tbl_u0 = Table(usage_summary, colWidths=[220, 80])
+    tbl_u0.setStyle(_table(style_header_bg="#0F172A", zebra=True))
+    elems.append(tbl_u0)
+    elems.append(Spacer(1, 10))
+
+    # Marka dağılımı
+    elems.append(Paragraph("Markaya Göre Kullanım", styles["H3"]))
+    u_brand = [["Marka", "Adet"]] + [[k, v] for k, v in _count_by_attr(inuse_devices, "brand")]
+    tbl_u1 = Table(u_brand, colWidths=[300, 80]); tbl_u1.setStyle(_table(style_header_bg="#1F2937", zebra=True))
+    elems.append(tbl_u1); elems.append(Spacer(1, 8))
+
+    # Tip dağılımı
+    elems.append(Paragraph("Tip Bazlı Kullanım", styles["H3"]))
+    u_type = [["Tip", "Adet"]] + [[k, v] for k, v in _count_by_attr(inuse_devices, "type")]
+    tbl_u2 = Table(u_type, colWidths=[300, 80]); tbl_u2.setStyle(_table(style_header_bg="#334155", zebra=True))
+    elems.append(tbl_u2); elems.append(Spacer(1, 8))
+
+    # Son 20 kullanım (kullanıcı bazlı)
+    elems.append(Paragraph("Son 20 Kullanım Kaydı", styles["H3"]))
+    last_usages = (
+        Usage.query.filter(Usage.return_date.is_(None))
+        .order_by(Usage.assigned_date.desc(), Usage.id.desc())
+        .limit(20).all()
+    )
+    rows = [["Kullanıcı","Marka","Tip","Seri No","Veriliş"]]
+    for u in last_usages:
+        d = u.device
+        rows.append([u.user_name or "—", d.brand or "—", d.type or "—", d.serial or "—",
+                    u.assigned_date.strftime("%Y-%m-%d") if u.assigned_date else "—"])
+    tbl_u3 = Table(rows, colWidths=[140,120,120,160,80]); tbl_u3.setStyle(_table(style_header_bg="#111111", zebra=True))
+    elems.append(tbl_u3)
 
     # Dipnot
     elems.append(Spacer(1, 6))

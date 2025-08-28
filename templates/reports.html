@@ -18,6 +18,7 @@
       --green:#2E7D32;
       --amber:#F59E0B;
       --teal:#0E9384;
+      --blue:#2563EB; /* Kullanımda */
     }
     body{background:#F6F7FA;color:var(--ink)}
     .navbar-dark .nav-link{font-weight:600}
@@ -62,6 +63,7 @@
       <ul class="navbar-nav ms-3">
         <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Depo Envanteri</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('faults') }}">Arızalı Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inuse') }}">Kullanımdaki Cihazlar</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('service') }}">Servis Geçmişi</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('params') }}">Parametreler</a></li>
         <li class="nav-item"><a class="nav-link active" href="{{ url_for('reports') }}">Raporlar</a></li>
@@ -76,6 +78,7 @@
     <strong>Kullanım ipucu:</strong> Grafiklerde çubukların üzerinde değerler gösterilir. Eksen adları ve grid çizgileri analizi kolaylaştırır.
   </div>
 
+  <!-- GENEL KART -->
   <div class="card mg mb-4">
     <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
       <div>
@@ -101,10 +104,14 @@
       <div class="row g-4">
         <div class="col-lg-5">
           <div class="chart-wrap"><canvas id="donutGeneral"></canvas></div>
-          <div class="legend-note mt-2">Serviste + Arızalı Depoda + Sağlam Depoda toplamı tüm cihaz adedini verir.</div>
+          <div class="legend-note mt-2">
+            <strong>Kullanımda</strong> + <strong>Serviste</strong> + <strong>Arızalı Depoda</strong> + <strong>Sağlam Depoda</strong> toplamı, tüm cihaz adedini verir.
+          </div>
+
           <h6 class="subtle mt-4">Markaya Göre Toplam (Stack)</h6>
           <div class="chart-wrap sm"><canvas id="barTotalBrand"></canvas></div>
         </div>
+
         <div class="col-lg-7">
           <div class="row g-4">
             <div class="col-12">
@@ -121,10 +128,11 @@
     </div>
   </div>
 
+  <!-- DAĞILIMLAR KARTI -->
   <div class="card mg mb-4">
     <div class="card-header">
       <div class="section-title mb-0">Marka & Tip Bazlı Dağılımlar</div>
-      <div class="subtle">Depodaki sağlam / arızalı ve servisteki cihazların marka/tip kırılımları</div>
+      <div class="subtle">Depodaki sağlam / arızalı, servisteki ve kullanımda olan cihazların tip kırılımları.</div>
     </div>
     <div class="card-body">
       <div class="row g-4">
@@ -144,6 +152,15 @@
           <h6 class="subtle">Arızalı Cihazlar (Tip)</h6>
           <div class="chart-wrap sm"><canvas id="barFaultyType"></canvas></div>
         </div>
+
+        <div class="col-md-6">
+          <h6 class="subtle">Kullanımda (Tip)</h6>
+          <div class="chart-wrap sm"><canvas id="barInuseType"></canvas></div>
+        </div>
+        <div class="col-md-6">
+          <h6 class="subtle">Kullanımda (Marka)</h6>
+          <div class="chart-wrap sm"><canvas id="barInuseBrand"></canvas></div>
+        </div>
       </div>
     </div>
   </div>
@@ -152,181 +169,184 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+<!-- Sunucudan gelen rapor verileri -->
 <script id="reportData" type="application/json">
 {{ {
   "healthy_count": healthy_count|default(0)|int,
   "faulty_count": faulty_count|default(0)|int,
   "service_count": service_count|default(0)|int,
+  "inuse_count":   inuse_count|default(0)|int,
+
   "healthy_brand_labels": healthy_brand_labels|default([], true),
   "healthy_brand_values": healthy_brand_values|default([], true),
   "faulty_brand_labels":  faulty_brand_labels|default([], true),
   "faulty_brand_values":  faulty_brand_values|default([], true),
   "service_brand_labels": service_brand_labels|default([], true),
   "service_brand_values": service_brand_values|default([], true),
+  "inuse_brand_labels":   inuse_brand_labels|default([], true),
+  "inuse_brand_values":   inuse_brand_values|default([], true),
+
   "healthy_type_labels": healthy_type_labels|default([], true),
   "healthy_type_values": healthy_type_values|default([], true),
   "faulty_type_labels":  faulty_type_labels|default([], true),
   "faulty_type_values":  faulty_type_values|default([], true),
   "service_type_labels": service_type_labels|default([], true),
-  "service_type_values": service_type_values|default([], true)
+  "service_type_values": service_type_values|default([], true),
+  "inuse_type_labels":   inuse_type_labels|default([], true),
+  "inuse_type_values":   inuse_type_values|default([], true),
+
+  "inuse_user_labels":   inuse_user_labels|default([], true),
+  "inuse_user_values":   inuse_user_values|default([], true)
 } | tojson }}
 </script>
 
 <script>
   const D = JSON.parse(document.getElementById('reportData').textContent);
-  const red=getCss('--brand-red'), green=getCss('--green'), amber=getCss('--amber'), teal=getCss('--teal'), grid=getCss('--line');
+  const red=getCss('--brand-red'), green=getCss('--green'), amber=getCss('--amber'), teal=getCss('--teal'), grid=getCss('--line'), blue=getCss('--blue');
   function getCss(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
   Chart.defaults.font.family=`"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial`;
   const baseOpts={maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,usePointStyle:true}}},layout:{padding:{top:8,right:12,bottom:8,left:12}}};
   const axis=t=>({grid:{color:grid},ticks:{autoSkip:false,maxRotation:0,minRotation:0,font:{size:12}},title:{display:true,text:t,font:{weight:'600'}}});
   const valueLabels={color:'#344054',anchor:'end',align:'top',offset:4,font:{weight:'600',size:11},formatter:v=>(v??0)};
 
+  /* Donut */
   new Chart(document.getElementById('donutGeneral'),{
     type:'doughnut',
-    data:{labels:['Serviste','Arızalı Depoda','Sağlam Depoda'],
-      datasets:[{data:[D.service_count,D.faulty_count,D.healthy_count],backgroundColor:[amber,red,green],borderWidth:1,borderColor:'#fff',hoverOffset:8}]},
-    options:{...baseOpts,plugins:{legend:{position:'bottom'},datalabels:{color:'#111',formatter:(v,ctx)=>{const total=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+(b||0),0)||1;const pct=Math.round((v/total)*100);return `${v} • ${pct}%`;},font:{weight:'600'}}},cutout:'58%'},plugins:[ChartDataLabels]
+    data:{
+      labels:['Kullanımda','Serviste','Arızalı Depoda','Sağlam Depoda'],
+      datasets:[{
+        data:[D.inuse_count, D.service_count, D.faulty_count, D.healthy_count],
+        backgroundColor:[blue, amber, red, green],
+        borderWidth:1, borderColor:'#fff', hoverOffset:8
+      }]
+    },
+    options:{
+      ...baseOpts,
+      plugins:{
+        legend:{position:'bottom'},
+        datalabels:{
+          color:'#111',
+          formatter:(v,ctx)=>{
+            const total=ctx.chart.data.datasets[0].data.reduce((a,b)=>a+(b||0),0)||1;
+            const pct=Math.round((v/total)*100);
+            return `${v} • ${pct}%`;
+          },
+          font:{weight:'600'}
+        }
+      },
+      cutout:'58%'
+    },
+    plugins:[ChartDataLabels]
   });
 
   function makeBar(id, labels, values, color, xTitle, yTitle){
-  return new Chart(document.getElementById(id), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        backgroundColor: color,
-        borderRadius: 6,
-        maxBarThickness: 46
-      }]
-    },
-    options: {
-      ...baseOpts,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true },
-        datalabels: valueLabels
+    return new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: color,
+          borderRadius: 6,
+          maxBarThickness: 46
+        }]
       },
-      layout: { padding: { bottom: 8 } },
-      scales: {
-        x: {
-          ...axis(xTitle),
-          grid: { display: false },
-          ticks: {
-            // TAM isimleri göster, 45° eğik
-            autoSkip: false,
-            maxRotation: 45,
-            minRotation: 45,
-            font: { size: 11 }
-          }
+      options: {
+        ...baseOpts,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true },
+          datalabels: valueLabels
         },
-        y: {
-          ...axis(yTitle),
-          beginAtZero: true,
-          ticks: { stepSize: 1, precision: 0 }
+        layout: { padding: { bottom: 8 } },
+        scales: {
+          x: {
+            ...axis(xTitle),
+            grid: { display: false },
+            ticks: {
+              autoSkip: false,
+              maxRotation: 45,
+              minRotation: 45,
+              font: { size: 11 }
+            }
+          },
+          y: {
+            ...axis(yTitle),
+            beginAtZero: true,
+            ticks: { stepSize: 1, precision: 0 }
+          }
         }
-      }
-    },
-    plugins: [ChartDataLabels]
-  });
-}
+      },
+      plugins: [ChartDataLabels]
+    });
+  }
 
+  /* Stack - markaya göre toplam (Sağlam/Arızalı/Servis/Kullanımda) */
   function buildStackedBrand(){
-    const set=new Set([...(D.healthy_brand_labels||[]),...(D.faulty_brand_labels||[]),...(D.service_brand_labels||[])]);
+    const set=new Set([
+      ...(D.healthy_brand_labels||[]),
+      ...(D.faulty_brand_labels||[]),
+      ...(D.service_brand_labels||[]),
+      ...(D.inuse_brand_labels||[])
+    ]);
     const labels=Array.from(set).sort((a,b)=>String(a).localeCompare(String(b),'tr'));
     const pick=(L,V)=>labels.map(l=>{const i=(L||[]).indexOf(l);return i>=0?((V||[])[i]||0):0;});
     const healthy=pick(D.healthy_brand_labels,D.healthy_brand_values);
     const faulty =pick(D.faulty_brand_labels ,D.faulty_brand_values );
     const service=pick(D.service_brand_labels,D.service_brand_values);
-    const total=labels.map((_,i)=>healthy[i]+faulty[i]+service[i]);
-    return {labels,healthy,faulty,service,total};
+    const inuse  =pick(D.inuse_brand_labels ,D.inuse_brand_values );
+    const total=labels.map((_,i)=>healthy[i]+faulty[i]+service[i]+inuse[i]);
+    return {labels,healthy,faulty,service,inuse,total};
   }
   const STACK=buildStackedBrand();
 
+  /* Sağlam / Arızalı tekli barlar */
   makeBar('barHealthyBrand',D.healthy_brand_labels,D.healthy_brand_values,teal,'Marka','Adet');
   makeBar('barFaultyBrand' ,D.faulty_brand_labels ,D.faulty_brand_values ,red ,'Marka','Adet');
 
+  /* Kullanımda (Marka/Tip/Kullanıcı) */
+  makeBar('barInuseBrand', D.inuse_brand_labels, D.inuse_brand_values, blue, 'Marka', 'Adet');
+  makeBar('barInuseType',  D.inuse_type_labels,  D.inuse_type_values,  blue, 'Tip',   'Adet');
+
+  /* Stack bar */
   new Chart(document.getElementById('barTotalBrand'),{
-  type:'bar',
-  data:{
-    labels: STACK.labels,
-    datasets:[
-      {label:'Sağlam',   data:STACK.healthy, backgroundColor:teal,   borderRadius:6, maxBarThickness:46},
-      {label:'Arızalı',  data:STACK.faulty,  backgroundColor:red,    borderRadius:6, maxBarThickness:46},
-      {label:'Serviste', data:STACK.service, backgroundColor:amber,  borderRadius:6, maxBarThickness:46},
-    ]
-  },
-  options:{
-    ...baseOpts,
-    plugins:{ legend:{position:'bottom'}, tooltip:{enabled:true}, datalabels:{display:false} },
-    layout:{ padding:{ bottom:8 } },
-    scales:{
-      x:{
-        ...axis('Marka'),
-        stacked:true,
-        grid:{ display:false },
-        ticks:{
-          autoSkip:false,
-          maxRotation:45,
-          minRotation:45,
-          font:{ size:11 }
+    type:'bar',
+    data:{
+      labels: STACK.labels,
+      datasets:[
+        {label:'Sağlam',     data:STACK.healthy, backgroundColor:teal,  borderRadius:6, maxBarThickness:46},
+        {label:'Arızalı',    data:STACK.faulty,  backgroundColor:red,   borderRadius:6, maxBarThickness:46},
+        {label:'Serviste',   data:STACK.service, backgroundColor:amber, borderRadius:6, maxBarThickness:46},
+        {label:'Kullanımda', data:STACK.inuse,   backgroundColor:blue,  borderRadius:6, maxBarThickness:46},
+      ]
+    },
+    options:{
+      ...baseOpts,
+      plugins:{ legend:{position:'bottom'}, tooltip:{enabled:true}, datalabels:{display:false} },
+      layout:{ padding:{ bottom:8 } },
+      scales:{
+        x:{
+          ...axis('Marka'),
+          stacked:true,
+          grid:{ display:false },
+          ticks:{ autoSkip:false, maxRotation:45, minRotation:45, font:{ size:11 } }
+        },
+        y:{
+          ...axis('Adet'),
+          stacked:true,
+          beginAtZero:true,
+          ticks:{ stepSize:1, precision:0 }
         }
-      },
-      y:{
-        ...axis('Adet'),
-        stacked:true,
-        beginAtZero:true,
-        ticks:{ stepSize:1, precision:0 }
       }
     }
-  }
-});
+  });
 
-
+  /* Diğer barlar */
   makeBar('barServiceBrand',D.service_brand_labels,D.service_brand_values,amber,'Marka','Adet');
   makeBar('barHealthyType' ,D.healthy_type_labels ,D.healthy_type_values ,teal ,'Tip','Adet');
   makeBar('barFaultyType'  ,D.faulty_type_labels  ,D.faulty_type_values  ,red  ,'Tip','Adet');
   makeBar('barServiceType' ,D.service_type_labels ,D.service_type_values ,amber,'Tip','Adet');
-
-  function buildCsv(){
-    const lines=[]; const push=(title,labels,values,col1)=>{lines.push(title);lines.push(`${col1},Adet`);(labels||[]).forEach((l,i)=>lines.push(`"${l}",${(values&&values[i]!=null)?values[i]:''}`));lines.push("");};
-    lines.push("Özet");lines.push("Durum,Adet");
-    lines.push(`Serviste,${D.service_count}`);lines.push(`Arızalı Depoda,${D.faulty_count}`);lines.push(`Sağlam Depoda,${D.healthy_count}`);lines.push("");
-    push("Sağlam - Marka",D.healthy_brand_labels,D.healthy_brand_values,"Marka");
-    push("Arızalı - Marka",D.faulty_brand_labels ,D.faulty_brand_values ,"Marka");
-    push("Servis - Marka" ,D.service_brand_labels,D.service_brand_values,"Marka");
-    push("Sağlam - Tip"  ,D.healthy_type_labels ,D.healthy_type_values ,"Tip");
-    push("Arızalı - Tip" ,D.faulty_type_labels  ,D.faulty_type_values  ,"Tip");
-    push("Servis - Tip"  ,D.service_type_labels ,D.service_type_values ,"Tip");
-    lines.push("Toplam - Marka (Sağlam/Arızalı/Serviste/Toplam)");
-    lines.push("Marka,Sağlam,Arızalı,Serviste,Toplam");
-    STACK.labels.forEach((l,i)=>{const h=STACK.healthy[i]||0,f=STACK.faulty[i]||0,s=STACK.service[i]||0,t=STACK.total[i]||h+f+s;lines.push(`"${l}",${h},${f},${s},${t}`);});
-    lines.push(""); return lines.join("\n");
-  }
-
-  function download(filename,content,mime){const blob=new Blob([content],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},0);}
-
-  document.getElementById('btnCsv').addEventListener('click',()=>{const csv=buildCsv();const stamp=new Date().toISOString().slice(0,10);download(`raporlar_${stamp}.csv`,csv,'text/csv;charset=utf-8;');});
-
-  document.getElementById('btnXlsx').addEventListener('click',()=>{
-    const wb=XLSX.utils.book_new();
-    const summary=[["Durum","Adet"],["Serviste",D.service_count],["Arızalı Depoda",D.faulty_count],["Sağlam Depoda",D.healthy_count]];
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),"Özet");
-    const add=(title,labels,values,col1)=>{const rows=[[col1,"Adet"]];(labels||[]).forEach((l,i)=>rows.push([l,(values&&values[i])||0]));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),title);};
-    add("Sağlam-Marka",D.healthy_brand_labels,D.healthy_brand_values,"Marka");
-    add("Arızalı-Marka" ,D.faulty_brand_labels ,D.faulty_brand_values ,"Marka");
-    add("Servis-Marka"  ,D.service_brand_labels,D.service_brand_values,"Marka");
-    add("Sağlam-Tip"    ,D.healthy_type_labels ,D.healthy_type_values ,"Tip");
-    add("Arızalı-Tip"   ,D.faulty_type_labels  ,D.faulty_type_values  ,"Tip");
-    add("Servis-Tip"    ,D.service_type_labels ,D.service_type_values ,"Tip");
-    const total=[["Marka","Sağlam","Arızalı","Serviste","Toplam"]];
-    STACK.labels.forEach((l,i)=>total.push([l,STACK.healthy[i]||0,STACK.faulty[i]||0,STACK.service[i]||0,STACK.total[i]||((STACK.healthy[i]||0)+(STACK.faulty[i]||0)+(STACK.service[i]||0))]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(total),"Toplam-Marka");
-    const stamp=new Date().toISOString().slice(0,10);
-    XLSX.writeFile(wb,`raporlar_${stamp}.xlsx`);
-  });
 </script>
 
 <footer class="footer"><p>© 2025 Cihaz Takip Sistemi</p></footer>

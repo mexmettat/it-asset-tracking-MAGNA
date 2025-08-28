@@ -26,6 +26,17 @@
     width:52px; height:30px; text-align:center;
     padding:0 .25rem; border:1px solid #dee2e6; background:#fff;
   }
+  .badge-soft-lock{
+  background:#F3F4F6;           /* soft gri */
+  color:#6B7280;                 /* muted metin */
+  border:1px solid #E5E7EB;      /* ince çerçeve */
+  padding:.375rem .6rem;
+  border-radius:999px;           /* pill */
+  font-weight:600;
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+}
   /* input-group içinde iki formu görünmez sarmalayıcı gibi kullan */
   .input-group.qty-group form{ display:contents; }
   @media (max-width: 992px){
@@ -52,6 +63,7 @@
       <ul class="navbar-nav ms-3">
         <li class="nav-item"><a class="nav-link active" href="{{ url_for('inventory') }}">Depo Envanteri</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('faults') }}">Arızalı Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inuse') }}">Kullanımdaki Cihazlar</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('service') }}">Servis Geçmişi</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('params') }}">Parametreler</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('reports') }}">Raporlar</a></li>
@@ -156,28 +168,50 @@
             </div>
             </td>
 
-            <td>
-              {% if d.is_faulty %}
-                <span class="badge rounded-pill text-bg-danger">Arızalı</span>
-              {% else %}
-                <span class="badge rounded-pill text-bg-success">Depoda</span>
-              {% endif %}
-            </td>
-            <td class="text-nowrap">
+           <td>
+            {% if d.id in open_service_ids %}
+              <span class="badge rounded-pill text-bg-warning text-dark">Serviste</span>
+            {% elif d.is_faulty %}
+              <span class="badge rounded-pill text-bg-danger">Arızalı</span>
+            {% elif d.id in active_usage_ids %}
+              <span class="badge rounded-pill text-bg-info">Kullanımda</span>
+            {% else %}
+              <span class="badge rounded-pill text-bg-success">Depoda</span>
+            {% endif %}
+          </td>
+
+          {#her satır için: #}
+          {% set locked =
+            (d.id in (active_usage_ids | default([], true))) or
+            (d.id in (open_service_ids | default([], true)))
+          %}
+
+          <td class="text-nowrap">
+            {% if locked %}
+              <span class="badge badge-soft-lock" data-bs-toggle="tooltip"
+                    title="Bu cihaz Serviste veya Kullanımda. Bu durumdayken düzenlenemez, silinemez ve arızalı/normal değiştirilemez.">
+                🔒 Kilitli
+              </span>
+            {% else %}
+              <!-- normal butonlar -->
               <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#edit{{ d.id }}">Düzenle</button>
+
               <form id="del{{ d.id }}" action="{{ url_for('inventory_delete', id=d.id) }}" method="post" class="d-inline">
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="if(confirm('Silinsin mi?')) this.form.submit()">Sil</button>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        onclick="if(confirm('Silinsin mi?')) this.form.submit()">Sil</button>
               </form>
+
               {% if not d.is_faulty %}
-              <form action="{{ url_for('inventory_mark_faulty', id=d.id) }}" method="post" class="d-inline">
-                <button class="btn btn-sm btn-warning">Arızalı Olarak İşaretle</button>
-              </form>
+                <form action="{{ url_for('inventory_mark_faulty', id=d.id) }}" method="post" class="d-inline">
+                  <button class="btn btn-sm btn-warning">Arızalı Olarak İşaretle</button>
+                </form>
               {% else %}
-              <form action="{{ url_for('inventory_mark_ok', id=d.id) }}" method="post" class="d-inline">
-                <button class="btn btn-sm btn-outline-secondary">Normal Yap</button>
-              </form>
+                <form action="{{ url_for('inventory_mark_ok', id=d.id) }}" method="post" class="d-inline">
+                  <button class="btn btn-sm btn-outline-secondary">Normal Yap</button>
+                </form>
               {% endif %}
-            </td>
+            {% endif %}
+          </td>
           </tr>
 
           <!-- Düzenleme Modali -->
@@ -314,6 +348,12 @@
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // enable tooltips globally
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el=>{
+    new bootstrap.Tooltip(el);
+  });
+</script>
 
 </body>
 </html>
