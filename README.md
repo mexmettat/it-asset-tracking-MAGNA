@@ -114,3 +114,6 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 **Mehmet TAT**  
 - [GitHub](https://github.com/mexmettat)  
 - [LinkedIn](https://www.linkedin.com/in/mehmettat/)
+
+## ⚠️ ATTENTION
+- The company name and logo have been changed due to legal restrictions on publishing them without permission, but this application is actively used by the IT team.
