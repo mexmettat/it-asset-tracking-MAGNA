@@ -1190,7 +1190,7 @@ def _on_page(canvas, doc):
 
     # Sol üstte ürün adı
     canvas.setFont(_pick_font(True), 11)
-    canvas.drawString(24, H - 28, "MAGNA IT — Rapor")
+    canvas.drawString(24, H - 28, "METTA IT — Rapor")
 
     # Sağ üstte tarih
     canvas.setFont(_pick_font(False), 9)
@@ -1276,7 +1276,7 @@ def reports_download_pdf():
 
     # Başlık
     title = f"Genel Rapor — {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-    elems.append(Paragraph("MAGNA IT", styles["Title"]))
+    elems.append(Paragraph("METTA IT", styles["Title"]))
     elems.append(Paragraph(title, styles["Subtle"]))
     elems.append(Spacer(1, 10))
 
@@ -1386,7 +1386,7 @@ def reports_download_pdf():
     # Dipnot
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
-        "Not: Bu PDF, MAGNA IT için oluşturulmuştur.",
+        "Not: Bu PDF, METTA IT için oluşturulmuştur.",
         styles["Subtle"]
     ))
 
