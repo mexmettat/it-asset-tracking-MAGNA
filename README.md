@@ -86,9 +86,9 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
   ![Faulty](screenshots/arizayeni.jpg)
 
 - **In Use Devices**
-  ![InUse](screenshots/inusecihaz)
-  ![InUse](screenshots/kullanımaver)
-  ![InUse](screenshots/iadeişlemi)
+  ![InUse](screenshots/inusecihaz.jpg)
+  ![InUse](screenshots/kullanımaver.jpg)
+  ![InUse](screenshots/iadeişlemi.jpg)
 
 
 - **Service History**  
