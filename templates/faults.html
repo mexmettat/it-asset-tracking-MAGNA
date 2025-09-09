@@ -75,6 +75,26 @@
             {% endfor %}
           </select>
 
+          <div class="input-group input-group-sm" style="min-width:190px">
+        <span class="input-group-text">Marka</span>
+        <select class="form-select" name="brand" onchange="this.form.submit()">
+          <option value="">Tümü</option>
+          {% for b in brands %}
+            <option value="{{ b }}" {% if selected_brand==b %}selected{% endif %}>{{ b }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="input-group input-group-sm" style="min-width:190px">
+        <span class="input-group-text">Tip</span>
+        <select class="form-select" name="type" onchange="this.form.submit()">
+          <option value="">Tümü</option>
+          {% for t in types %}
+            <option value="{{ t }}" {% if selected_type==t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
           <button class="btn btn-outline-secondary btn-sm" type="submit">Ara</button>
         </form>
 

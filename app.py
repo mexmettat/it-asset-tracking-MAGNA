@@ -366,9 +366,17 @@ def faults():
     q = (request.args.get("q") or "").strip()              # arama (seri/marka/tip/home_code/os)
     page = request.args.get("page", 1, type=int)           # sayfa
     per_page = request.args.get("per_page", 10, type=int)  # sayfa başına kayıt
+    brand_sel = (request.args.get("brand") or "").strip()          # YENİ: marka filtresi
+    type_sel  = (request.args.get("type") or "").strip()           # YENİ: tip filtresi
 
     # Sadece arızalı cihazlar
     base = Device.query.filter(Device.is_faulty.is_(True))
+
+    #Marka/Tip filtreleri
+    if brand_sel:
+        base = base.filter(Device.brand == brand_sel)
+    if type_sel:
+        base = base.filter(Device.type == type_sel)
 
     # Arama
     if q:
@@ -382,6 +390,15 @@ def faults():
         ))
         # arama yapılınca 1. sayfadan başla
         page = 1
+
+    # Filtre (brand/type) değiştiğinde de 1. sayfadan başla (opsiyonel ama faydalı)
+    if request.args.get("brand") is not None or request.args.get("type") is not None:
+        try:
+            # sadece sayfa paramı yoksa sıfırla; varsa kullanıcı bilinçli geziniyordur
+            if "page" not in request.args:
+                page = 1
+        except Exception:
+            page = 1
 
     # Sayfalama
     pagination = base.order_by(Device.created_at.desc()).paginate(
@@ -414,6 +431,8 @@ def faults():
         per_page=per_page,
         open_fault_title=open_fault_title,
         open_fault_id=open_fault_id,
+        selected_brand=brand_sel,
+        selected_type=type_sel,
     )
 
 @app.route("/faults/add", methods=["POST"])
