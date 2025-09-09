@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AI Assistant · METTA IT</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/magna-icon.png') }}">
+
+  <style>
+    :root{
+      --brand-red:#E41E26;
+      --ink:#101828;
+      --muted:#475467;
+      --line:#EAECF0;
+      --soft:#F6F7FA;
+      --chip:#F2F4F7;
+    }
+    body{background:var(--soft); color:var(--ink);}
+    .navbar-dark .nav-link{font-weight:600}
+    .navbar-dark .nav-link.active{color:#fff;border-bottom:2px solid var(--brand-red)}
+    .card.mg{border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 18px rgba(16,24,40,.06)}
+    .card-header{background:#fff;border-bottom:1px solid var(--line)}
+    .subtle{color:var(--muted)}
+    .chip{
+      display:inline-flex;align-items:center;gap:.5rem;
+      background:var(--chip);border:1px solid var(--line);
+      padding:.35rem .7rem;border-radius:999px;cursor:pointer;
+      font-weight:600;font-size:.9rem;
+    }
+    .chip:hover{background:#eaeef3}
+    .search-wrap{
+      position:relative;
+    }
+    .search-wrap .icon{
+      position:absolute;left:.8rem;top:50%;transform:translateY(-50%);color:#98A2B3;
+    }
+    .search-input{
+      padding-left:2.4rem;
+      height:44px;
+      border-radius:10px;
+      border:1px solid var(--line);
+    }
+    .btn-danger{
+      background:var(--brand-red);border-color:var(--brand-red);
+      font-weight:700;
+    }
+    .btn-danger:disabled{opacity:.7}
+    .empty{
+      background:#fff;border:1px dashed var(--line);border-radius:12px;
+      padding:24px;text-align:center;color:var(--muted);
+    }
+    .footer{background:#f9fafb;color:#6b7280;text-align:center;padding:10px;font-size:14px;border-top:1px solid #e5e7eb;margin-top:20px;}
+  </style>
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg navbar-dark" style="background:#000;">
+  <div class="container d-flex align-items-center">
+    <a class="navbar-brand d-flex align-items-center me-3" href="{{ url_for('inventory') }}">
+      <img src="{{ url_for('static', filename='img/magna-logo-navbar.png') }}" alt="MAGNA Logo" height="32" class="me-2">
+      <span class="brand-subtitle">IT CİHAZ TAKİP UYGULAMASI</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse flex-grow-0" id="nav">
+      <ul class="navbar-nav ms-3">
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Depo Envanteri</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('faults') }}">Arızalı Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('inuse') }}">Kullanımdaki Cihazlar</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('service') }}">Servis Geçmişi</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('params') }}">Parametreler</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('reports') }}">Raporlar</a></li>
+        <li class="nav-item"></li><a class="nav-link active" href="{{ url_for('assistant_ui') }}">Asistan</a>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container my-4">
+
+  <div class="card mg">
+    <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
+      <div>
+        <div class="fw-bold" style="font-size:1.15rem;">AI ASSISTANT</div>
+        <div class="subtle">Sorunuzu sorun ve cevabınızı alın.</div>
+      </div>
+    </div>
+
+    <div class="card-body">
+        <!-- Arama satırı -->
+        <form id="f" class="askbar">
+        <div class="input-group">
+            <span class="input-group-text">🔎</span>
+            <input name="q" id="q" class="form-control"
+                placeholder="SOR">
+            <button id="askBtn" class="btn btn-danger" type="submit">
+            <span class="btn-label">Sor</span>
+            <span class="spinner-border spinner-border-sm d-none" id="loading" role="status" aria-hidden="true"></span>
+            </button>
+        </div>
+        <div class="form-text subtle">
+            İpucu: “490154203237518 seri nolu cihaz serviste mi?” gibi net sorular da çalışır.
+        </div>
+        </form>
+
+      <!-- Öneri çipleri -->
+      <div class="mt-3 d-flex flex-wrap gap-2">
+        <span class="chip" data-q="Kullanımda olan cihazların marka bazında adetleri">Kullanımda • Marka</span>
+        <span class="chip" data-q="Arızalı depodaki cihazların tipe göre dağılımı">Arızalı • Tip</span>
+        <span class="chip" data-q="Servisteki cihazlar markaya göre kaç adet?">Serviste • Marka</span>
+        <span class="chip" data-q="Apple marka kaç cihaz kullanımda?">Apple • Kullanım</span>
+      </div>
+
+      <!-- Hata -->
+      <div id="err" class="alert alert-danger mt-3 d-none"></div>
+
+      <!-- Sonuç -->
+      <div id="ok" class="mt-3 d-none">
+        <div class="mb-2">
+          <span class="badge" style="background:var(--brand-red)">Özet</span>
+          <span id="sum" class="ms-1"></span>
+        </div>
+
+        <div id="empty" class="empty d-none">
+          Sonuç bulunamadı. Sorgunuzu biraz daha genel yazmayı deneyin.
+        </div>
+
+        <div class="table-responsive mt-2" id="tableWrap">
+          <table class="table table-hover table-sm align-middle mb-0">
+            <thead class="table-light" id="thead"></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<footer class="footer"><p>© 2025 Cihaz Takip Sistemi</p></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Öneri çipleri
+  document.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.getElementById('q').value = chip.dataset.q;
+      document.getElementById('q').focus();
+    })
+  });
+
+  const form = document.getElementById('f');
+  const askBtn = document.getElementById('askBtn');
+  const loading = document.getElementById('loading');
+
+  function setLoading(on){
+    askBtn.disabled = on;
+    loading.classList.toggle('d-none', !on);
+  }
+
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(form);
+
+    // temizle
+    document.getElementById('err').classList.add('d-none');
+    document.getElementById('ok').classList.add('d-none');
+    document.getElementById('empty').classList.add('d-none');
+    document.getElementById('thead').innerHTML = '';
+    document.getElementById('tbody').innerHTML = '';
+
+    setLoading(true);
+
+    try{
+      const r = await fetch('/assistant/query', { method:'POST', body: fd });
+      const j = await r.json();
+
+      if(!j.ok){
+        const err = document.getElementById('err');
+        err.textContent = j.error || 'Hata';
+        err.classList.remove('d-none');
+        setLoading(false);
+        return;
+      }
+
+      document.getElementById('sum').textContent = j.summary || '';
+
+      const cols = j.columns || [];
+      const rows = j.rows || [];
+
+      if(rows.length === 0){
+        document.getElementById('empty').classList.remove('d-none');
+        document.getElementById('ok').classList.remove('d-none');
+        setLoading(false);
+        return;
+      }
+
+      // thead
+      const trh = document.createElement('tr');
+      cols.forEach(c=>{
+        const th = document.createElement('th');
+        th.textContent = c;
+        trh.appendChild(th);
+      });
+      document.getElementById('thead').appendChild(trh);
+
+      // tbody
+      rows.forEach(row=>{
+        const tr = document.createElement('tr');
+        row.forEach(v=>{
+          const td = document.createElement('td');
+          td.textContent = (v===null?'—':v);
+          tr.appendChild(td);
+        });
+        document.getElementById('tbody').appendChild(tr);
+      });
+
+      document.getElementById('ok').classList.remove('d-none');
+    }catch(err){
+      const box = document.getElementById('err');
+      box.textContent = 'Beklenmeyen bir hata oluştu.';
+      box.classList.remove('d-none');
+    }finally{
+      setLoading(false);
+    }
+  });
+</script>
+</body>
+</html>

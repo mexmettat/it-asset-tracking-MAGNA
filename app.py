@@ -1,12 +1,14 @@
 from datetime import datetime
-import os
+import os, re, json
 import io
 import pandas as pd
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from collections import defaultdict
 from sqlalchemy import func
+from sqlalchemy import text, inspect
 from flask import send_file
+from flask import request, render_template, jsonify
 from datetime import datetime
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -17,6 +19,15 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from dotenv import load_dotenv
+load_dotenv()
+
+import google.generativeai as genai
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+GEMINI_MODEL_SQL   = "gemini-1.5-flash"
+GEMINI_MODEL_NOTES = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-1.5-flash" 
 
 # --- PDF İÇİN FONT ---
 BASE_DIR  = os.path.dirname(__file__)
@@ -169,6 +180,74 @@ def is_resolved_status(status: str) -> bool:
         return True
     s = status.lower()
     return any(k in s for k in ["tamir", "çöz", "onar", "teslim"])
+
+def get_db_schema_md():
+    """Tablolar/kolonlar => Markdown; modeli yönlendirmek için."""
+    insp = inspect(db.engine)
+    lines = []
+    for tbl in insp.get_table_names():
+        cols = [f"{c['name']} {str(c['type'])}" for c in insp.get_columns(tbl)]
+        lines.append(f"- **{tbl}**: " + ", ".join(cols))
+    return "\n".join(lines)
+
+DDL_HINT = """
+Veri modelindeki ana tablolar:
+- devices: id, brand, type, serial, home_code, os, quantity, is_faulty, created_at
+- service_records: id, device_id, service_date, status, description, cost, return_date, created_at
+- faults: id, device_id, title, is_open, created_at, resolved_at
+- usages: id, device_id, user_name, assigned_date, return_date, is_active
+
+Durum mantığı:
+- 'Sağlam Depoda' => devices.is_faulty == 0 ve device_id açık serviste yok
+- 'Arızalı Depoda' => devices.is_faulty == 1
+- 'Serviste' => service_records.status IN ('Beklemede','Gönderildi','Geldi')
+- 'Kullanımda' => usages.return_date IS NULL
+"""
+
+def guard_sql(sql: str) -> str:
+    """Sadece SELECT’e izin ver; tehlikeli komutları engelle; LIMIT ekle."""
+    s = sql.strip().strip(";").lower()
+    if not s.startswith("select"):
+        raise ValueError("Sadece SELECT sorgularına izin veriliyor.")
+    banned = [" insert ", " update ", " delete ", " drop ", " alter ", " create ", " pragma ", " attach ", " detach "]
+    if any(b in s for b in banned):
+        raise ValueError("Yazma/DDL komutlarına izin yok.")
+    if " limit " not in s:
+        sql = sql.strip().rstrip(";") + " LIMIT 100"
+    return sql
+
+def llm_nl_to_sql(user_prompt: str, schema_md: str) -> str:
+    """Doğal dili -> tek satır SQLite SELECT sorgusu (Gemini)."""
+    model = genai.GenerativeModel(GEMINI_MODEL_SQL,
+                                  system_instruction=(
+                                     "You are a careful data analyst. "
+                                     "Return ONLY one valid SQLite SELECT query. No prose, no comments."
+                                  ))
+    prompt = (
+        f"SQLite schema (markdown):\n{schema_md}\n\n"
+        f"{DDL_HINT}\n\n"
+        f"Question (in Turkish):\n{user_prompt}\n\n"
+        "Return ONLY the SQL query. If aggregation is sensible, add readable aliases. "
+        "Use table/column names exactly as given."
+    )
+    resp = model.generate_content(prompt)
+    sql = resp.text or ""
+    # ```sql ... ``` bloklarını temizle
+    sql = re.sub(r"^```sql|```$", "", sql, flags=re.IGNORECASE|re.MULTILINE).strip("` \n;")
+    return sql
+
+def llm_commentary(user_prompt: str, rows_preview, stats) -> str:
+    """Sonuçlar üstüne kısa yorum/öneri (Gemini)."""
+    model = genai.GenerativeModel(GEMINI_MODEL_NOTES,
+                                  system_instruction="You are an IT operations analyst. Be concise, practical, Turkish.")
+    content = (
+        f"Kullanıcı sorusu: {user_prompt}\n\n"
+        f"İlk satırlar (JSON): {json.dumps(rows_preview, ensure_ascii=False)[:3000]}\n\n"
+        f"İstatistikler: {json.dumps(stats, ensure_ascii=False)}\n\n"
+        "Lütfen 2-4 madde halinde kısa içgörü/yorum üret."
+    )
+    resp = model.generate_content(content)
+    return (resp.text or "").strip()
 
 # =============================
 #           ROUTES
@@ -815,6 +894,195 @@ def usage_delete(id):
     flash("Kullanım kaydı silindi.", "ok")
     return redirect(url_for("inuse"))
 
+# -------- AI ASSISTANT --------
+@app.route("/assistant")
+def assistant_ui():
+    return render_template("assistant.html")
+
+# Yardımcı: DB şemasını (izinli kolonlarla) metinle hazırla
+def _schema_text():
+    return """
+Tables and columns (SQLite):
+
+devices(
+  id INTEGER PK, brand TEXT, type TEXT, serial TEXT UNIQUE, home_code TEXT,
+  os TEXT, quantity INTEGER, is_faulty BOOLEAN, created_at DATETIME
+)
+
+service_records(
+  id INTEGER PK, device_id INTEGER FK->devices.id, service_date DATE,
+  status TEXT, description TEXT, cost REAL, return_date DATE, created_at DATETIME
+)
+
+faults(
+  id INTEGER PK, device_id INTEGER FK->devices.id, title TEXT,
+  is_open BOOLEAN, created_at DATETIME, resolved_at DATETIME
+)
+
+usages(
+  id INTEGER PK, device_id INTEGER FK->devices.id, user_name TEXT,
+  assigned_date DATE, return_date DATE, is_active BOOLEAN
+)
+Foreign keys: service_records.device_id -> devices.id, faults.device_id -> devices.id, usages.device_id -> devices.id.
+"""
+
+# Güvenlik: sadece SELECT + otomatik LIMIT + kaba filtre
+SELECT_ONLY = re.compile(r"^\s*select\b", re.I|re.S)
+
+def _sanitize_sql(sql: str) -> str:
+    if not SELECT_ONLY.match(sql or ""):
+        raise ValueError("Only SELECT queries are allowed.")
+    # Çoklu statement engelle
+    if ";" in sql.strip().rstrip(";"):
+        raise ValueError("Only a single SELECT statement is allowed.")
+    # Varsayılan LIMIT ekle (yoksa)
+    if re.search(r"\blimit\b", sql, re.I) is None:
+        sql = sql.rstrip().rstrip(";") + " LIMIT 500"
+    return sql
+
+# Model çıktısına zorlama: JSON {sql, summary}
+SYSTEM_INSTRUCTIONS = """You are a SQL generator for an IT asset tracking DB (SQLite).
+Respond with STRICT JSON ONLY. 
+Format:
+{"sql":"SELECT ...","summary":"<short summary in Turkish>"}
+
+Rules:
+- Generate exactly ONE SELECT statement. NO UPDATE/DELETE/INSERT.
+- Prefer Turkish in 'summary'.
+- Use correct table/column names from the provided schema.
+- If user asks a distribution or counts, use GROUP BY and COUNT(*).
+- For 'in use' devices: usages.return_date IS NULL.
+- 'Serviste' means service_records with open statuses: ('Beklemede','Gönderildi').
+- 'Arızalı depoda' means devices.is_faulty=1.
+- 'Sağlam depoda' means not faulty, not in open service.
+- Always return JSON ONLY, no prose besides JSON.
+"""
+
+FEW_SHOTS = [
+    {
+      "user": "Arızalı depodaki cihazların tipe göre dağılımı",
+      "sql": """SELECT d.type AS "Tip", COUNT(*) AS "Adet"
+FROM devices d
+WHERE d.is_faulty = 1
+GROUP BY d.type
+ORDER BY "Adet" DESC""",
+      "summary": "Arızalı depodaki cihazları tipe göre saydım."
+    },
+    {
+      "user": "Kullanımda olan cihazların markalara göre sayısı",
+      "sql": """SELECT d.brand AS "Marka", COUNT(*) AS "Adet"
+FROM usages u
+JOIN devices d ON d.id = u.device_id
+WHERE u.return_date IS NULL
+GROUP BY d.brand
+ORDER BY "Adet" DESC""",
+      "summary": "Kullanımda olan cihazları marka bazında topladım."
+    },
+    {
+      "user": "Servisteki cihazların marka dağılımı",
+      "sql": """SELECT d.brand AS "Marka", COUNT(*) AS "Adet"
+FROM service_records s
+JOIN devices d ON d.id = s.device_id
+WHERE s.status IN ('Beklemede','Gönderildi')
+GROUP BY d.brand
+ORDER BY "Adet" DESC""",
+      "summary": "Açık servis durumundaki cihazların marka dağılımı."
+    }
+]
+
+def _build_prompt(user_query: str) -> str:
+    # few-shotları tek JSON dizesi olarak göm
+    shots = "\n".join(
+        [
+            f'User: {ex["user"]}\nReturn JSON: {json.dumps({"sql": ex["sql"], "summary": ex["summary"]}, ensure_ascii=False)}'
+            for ex in FEW_SHOTS
+        ]
+    )
+    return f"""{SYSTEM_INSTRUCTIONS}
+
+SCHEMA:
+{_schema_text()}
+
+EXAMPLES:
+{shots}
+
+USER QUESTION:
+{user_query}
+
+Return JSON only:
+"""
+
+# SQL’i çalıştır
+def _run_select(sql: str):
+    conn = db.engine.raw_connection()  # SQLAlchemy üzerinden raw sqlite bağlantı
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [c[0] for c in cur.description] if cur.description else []
+        rows = cur.fetchall()
+        return cols, rows
+    finally:
+        conn.close()
+
+# Asistan API: NL→SQL→Run→Sonuç
+@app.route("/assistant/query", methods=["POST"])
+def assistant_query():
+    q = (request.form.get("q") or "").strip()
+    if not q:
+        return jsonify({"ok": False, "error": "Soru boş olamaz."}), 400
+
+    prompt = _build_prompt(q)
+
+    def ask_model(p):
+        resp = genai.GenerativeModel(GEMINI_MODEL).generate_content(p)
+        txt = (resp.text or "").strip()
+
+        # JSON değilse ```json ... ``` bloğunu ayıkla
+        m = re.search(r"\{[\s\S]*\}", txt)
+        if not m:
+            raise ValueError(f"Model çıkışı JSON değil: {txt[:120]}")
+        txt = m.group(0)
+
+        return json.loads(txt)
+
+    # 1. dene
+    try:
+        data = ask_model(prompt)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Model çıkışı çözümlenemedi: {e}"}), 500
+
+    # Doğrula / düzeltme denemesi
+    for _ in range(2):
+        try:
+            sql = _sanitize_sql(data.get("sql",""))
+            break
+        except Exception as e:
+            # modele geri sor: “yalnızca tek SELECT üret ve JSON ver”
+            fix_prompt = prompt + f"\n\nThe previous output was invalid because: {e}\nGenerate a valid JSON again."
+            try:
+                data = ask_model(fix_prompt)
+            except Exception as e2:
+                return jsonify({"ok": False, "error": f"Model düzeltilemedi: {e2}"}), 500
+    else:
+        return jsonify({"ok": False, "error": "Geçerli SELECT üretilemedi."}), 400
+
+    # Çalıştır
+    try:
+        cols, rows = _run_select(sql)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Sorgu hatası: {e}", "sql": sql}), 400
+
+    # Özet
+    summary = data.get("summary") or "Sorgu çalıştırıldı."
+
+    # JSON döndür (UI tablo render eder)
+    return jsonify({
+        "ok": True,
+        "sql": sql,
+        "summary": summary,
+        "columns": cols,
+        "rows": rows
+    })
 # -------- REPORTS --------
 @app.route("/reports")
 def reports():
