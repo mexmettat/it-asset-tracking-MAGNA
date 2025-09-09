@@ -71,7 +71,30 @@ Main modules: **Inventory**, **Faulty Devices**, **Service History**, **Paramete
 
 ### 📘 User Guide (`/kullanim`)
 - Summary information on system usage  
-- Simplified documentation page for quick onboarding  
+- Simplified documentation page for quick onboarding
+
+### 🤖 AI Assistant (Gemini API Integration)
+
+The system includes an **AI-powered Assistant** module, built with **Google Gemini API**, that enables natural language queries directly on the IT Asset Tracking database.  
+
+- Users can ask questions in plain language such as:  
+  - *“How many devices are currently in use by brand?”*  
+  - *“List the distribution of faulty devices by type.”*  
+  - *“Is the device with serial number 490154203237518 under service?”*  
+
+- The assistant automatically converts the question into a **safe SQL `SELECT` query**, executes it on the database, and returns:  
+  - 📊 A structured table with results  
+  - 📝 A short natural-language summary for clarity  
+
+- ✅ Built-in safety checks ensure that only **read-only queries (SELECT)** are executed, preventing data modification.  
+
+- 🎨 The Assistant interface provides:  
+  - A modern search bar styled consistently with the **Inventory** module  
+  - Loading spinner feedback for queries  
+  - Responsive design with **Bootstrap**, ensuring alignment across all devices  
+
+This feature improves usability by allowing IT staff to analyze and explore asset data without writing SQL queries manually, bridging the gap between technical reporting and user-friendly access.
+
 
 ## 🎨 Design
 - **Navbar** at the top; clicking the logo redirects to the inventory page  
