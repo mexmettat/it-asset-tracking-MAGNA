@@ -142,6 +142,8 @@ This feature improves usability by allowing IT staff to analyze and explore asse
 - **User Guide**  
   ![User Guide](screenshots/kullanim.jpg)
 
+- **AI Assistant**  
+  ![Assistant](screenshots/asistan.jpg)
 ## 📝 Notes
 - Deletion actions require a **“Are you sure?”** confirmation  
 - Built with **Flask + SQLite + SQLAlchemy**  
